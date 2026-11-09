@@ -1,0 +1,35 @@
+diff --git a/src/raieval/cli.py b/src/raieval/cli.py
+index 8da0669..916bd73 100644
+--- a/src/raieval/cli.py
++++ b/src/raieval/cli.py
+@@ -49,6 +49,13 @@ def main(argv=None):
+     p = sub.add_parser("connect-test", help="one short call per model to check its key (asks first)")
+     p.add_argument("models", nargs="+", help="Inspect model strings, e.g. openai/<model>")
+     p.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
++    p = sub.add_parser("export-csv", help="results SQLite -> CSV, one row per response")
++    p.add_argument("--db", default=None, help="default: runs/results.sqlite")
++    p.add_argument("--run", dest="runs", action="append", metavar="RUN_ID",
++                   help="only this run (repeatable); default: every run in the file")
++    p.add_argument("--out", default=None, help="default: the --db path with .csv")
++    p.add_argument("--include-gated", action="store_true",
++                   help="keep safety-stage prompts (WildGuardTest terms: local use only)")
+     args = parser.parse_args(argv)
+ 
+     if args.command == "fetch":
+@@ -110,6 +117,16 @@ def main(argv=None):
+             score.main(db, args.release)
+         else:
+             score.export_method_team(db, Path(args.out_dir), args.release)
++    elif args.command == "export-csv":
++        from pathlib import Path
++
++        from raieval.run import csv_export, export
++        try:
++            csv_export.export_csv(Path(args.db) if args.db else export.DEFAULT_DB,
++                                  Path(args.out) if args.out else None, args.runs,
++                                  include_gated=args.include_gated)
++        except (FileNotFoundError, ValueError) as e:
++            parser.exit(1, f"export-csv: {e}\n")
+ 
+ 
+ if __name__ == "__main__":
