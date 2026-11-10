@@ -3,21 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BenchmarkChart } from "@/components/BenchmarkChart";
-import { ClassFilter } from "@/components/ClassFilter";
 import { ModelCard } from "@/components/ModelCard";
 import { PromptInspector } from "@/components/PromptInspector";
 import { ScoreGauge } from "@/components/ScoreGauge";
 import { promptsForAxis, type BenchmarkName } from "@/lib/examples";
 import { downloadRunPdf } from "@/lib/pdf";
-import {
-  EVEN_WEIGHTS,
-  formatScore,
-  rebalanceWeights,
-  reportChartRows,
-  withBbqClasses,
-  type BenchmarkWeights,
-  type ModelSummary,
-} from "@/lib/score";
+import { reportChartRows, type ModelSummary } from "@/lib/score";
 import type { DerivedReply, EvaluationRun } from "@/lib/types";
 
 type DashboardProps = {
@@ -28,50 +19,6 @@ type DashboardProps = {
   githubUrl: string;
   docsUrl: string;
 };
-
-function bbqLabels(summaries: ModelSummary[]): string[] {
-  const seen = new Set<string>();
-  const labels: string[] = [];
-  for (const summary of summaries) {
-    for (const point of summary.bbqByClass) {
-      if (seen.has(point.label)) continue;
-      seen.add(point.label);
-      labels.push(point.label);
-    }
-  }
-  return labels;
-}
-
-function sameMembers(left: readonly string[], right: readonly string[]): boolean {
-  if (left.length !== right.length) return false;
-  const names = new Set(left);
-  return right.every((label) => names.has(label));
-}
-
-function sameWeights(left: BenchmarkWeights, right: BenchmarkWeights): boolean {
-  return left.bbq === right.bbq && left.bbg === right.bbg && left.sycon === right.sycon && left.wildguard === right.wildguard;
-}
-
-function classSelectionStatus(
-  full: ModelSummary | null,
-  shown: ModelSummary | null,
-  labels: string[],
-  appliedHere: string[],
-  pending: boolean,
-): string {
-  const pendingNote = pending ? " Configuration changed. Recalculate to update the score." : "";
-  const scoreNote =
-    formatScore(full?.composite ?? null) === formatScore(shown?.composite ?? null)
-      ? ""
-      : ` Overall ${formatScore(full?.composite ?? null)} → ${formatScore(shown?.composite ?? null)}.`;
-  if (appliedHere.length === labels.length) {
-    return `All ${labels.length} BBQ classes are included.${scoreNote}${pendingNote}`;
-  }
-  if (appliedHere.length === 0) {
-    return `No BBQ classes are included, so the overall score uses the other tests only.${pendingNote}`;
-  }
-  return `BBQ uses ${appliedHere.length} of ${labels.length} classes. Overall ${formatScore(full?.composite ?? null)} → ${formatScore(shown?.composite ?? null)}.${pendingNote}`;
-}
 
 function openingAxis(summaries: ModelSummary[], replies: DerivedReply[]): { benchmark: BenchmarkName; axis: string } {
   const model = summaries[0]?.model;
@@ -92,10 +39,6 @@ export function Dashboard({ run, runs, summaries, replies, githubUrl, docsUrl }:
   const [openAxis, setOpenAxis] = useState<{ benchmark: BenchmarkName; axis: string }>(() =>
     openingAxis(summaries, replies),
   );
-  const [draftClasses, setDraftClasses] = useState<string[]>(() => bbqLabels(summaries));
-  const [appliedClasses, setAppliedClasses] = useState<string[]>(() => bbqLabels(summaries));
-  const [draftWeights, setDraftWeights] = useState<BenchmarkWeights>(EVEN_WEIGHTS);
-  const [appliedWeights, setAppliedWeights] = useState<BenchmarkWeights>(EVEN_WEIGHTS);
 
   useEffect(() => {
     if (!summaries.some((summary) => summary.model === selectedModel)) {
@@ -103,56 +46,11 @@ export function Dashboard({ run, runs, summaries, replies, githubUrl, docsUrl }:
     }
   }, [summaries, selectedModel, run.id]);
 
-  const [classRunId, setClassRunId] = useState(run.id);
-  if (classRunId !== run.id) {
-    const labels = bbqLabels(summaries);
-    setClassRunId(run.id);
-    setDraftClasses(labels);
-    setAppliedClasses(labels);
-    setDraftWeights(EVEN_WEIGHTS);
-    setAppliedWeights(EVEN_WEIGHTS);
-  }
-
-  const applied = new Set(appliedClasses);
-  const draft = new Set(draftClasses);
-  const configured = summaries.map((summary) => withBbqClasses(summary, applied, appliedWeights));
-  const selectedSummary = configured.find((summary) => summary.model === selectedModel) ?? null;
-  const selectedFull = summaries.find((summary) => summary.model === selectedModel) ?? null;
-  const classLabels = selectedFull?.bbqByClass.map((point) => point.label) ?? [];
-  const bbq = reportChartRows(configured, selectedModel, (summary) => summary.bbqByClass);
+  const selectedSummary = summaries.find((summary) => summary.model === selectedModel) ?? null;
+  const bbq = reportChartRows(summaries, selectedModel, (summary) => summary.bbqByClass);
   const bbg = reportChartRows(summaries, selectedModel, (summary) => summary.bbgByClass);
   const wildguard = reportChartRows(summaries, selectedModel, (summary) => summary.wgBySheet);
   const sycon = reportChartRows(summaries, selectedModel, (summary) => summary.syconByTurn);
-  const visibleBbq = selectedSummary?.bbqByClass.map((point) => point.label) ?? [];
-  if (openAxis.benchmark === "BBQ" && visibleBbq.length > 0 && !visibleBbq.includes(openAxis.axis)) {
-    const sample = replies.find(
-      (row) => row.model === selectedModel && row.test === "BBQ" && row.cls && visibleBbq.includes(row.cls),
-    );
-    setOpenAxis({ benchmark: "BBQ", axis: sample?.cls ?? visibleBbq[0] });
-  }
-
-  function toggleClass(label: string) {
-    setDraftClasses((current) =>
-      current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
-    );
-  }
-
-  function selectAllClasses() {
-    setDraftClasses((current) => {
-      const next = new Set(current);
-      for (const label of classLabels) next.add(label);
-      return [...next];
-    });
-  }
-
-  function clearClasses() {
-    const hidden = new Set(classLabels);
-    setDraftClasses((current) => current.filter((label) => !hidden.has(label)));
-  }
-
-  const selectionChanged = !sameMembers(draftClasses, appliedClasses) || !sameWeights(draftWeights, appliedWeights);
-  const appliedHere = classLabels.filter((label) => applied.has(label));
-  const classStatus = classSelectionStatus(selectedFull, selectedSummary, classLabels, appliedHere, selectionChanged);
 
   async function onExport() {
     const node = document.getElementById("run-report");
@@ -257,24 +155,6 @@ export function Dashboard({ run, runs, summaries, replies, githubUrl, docsUrl }:
           {selectedSummary ? <ModelCard summary={selectedSummary} /> : null}
         </section>
 
-        {classLabels.length > 0 ? (
-          <ClassFilter
-            labels={classLabels}
-            draft={draft}
-            weights={draftWeights}
-            canRecalculate={selectionChanged}
-            status={classStatus}
-            onToggle={toggleClass}
-            onSelectAll={selectAllClasses}
-            onClear={clearClasses}
-            onWeight={(key, value) => setDraftWeights((current) => rebalanceWeights(current, key, value))}
-            onRecalculate={() => {
-              setAppliedClasses(draftClasses);
-              setAppliedWeights(draftWeights);
-            }}
-          />
-        ) : null}
-
         <PromptInspector
           model={selectedModel}
           benchmark={openAxis.benchmark}
@@ -295,7 +175,6 @@ export function Dashboard({ run, runs, summaries, replies, githubUrl, docsUrl }:
             <BenchmarkChart
               title="BBQ"
               caption="Failure rate by class (lower is better)"
-              emptyLabel={classLabels.length > 0 ? "No classes selected." : undefined}
               model={selectedModel}
               data={bbq}
               onOpen={(axis) => setOpenAxis({ benchmark: "BBQ", axis })}
