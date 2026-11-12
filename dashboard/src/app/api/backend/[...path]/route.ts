@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { readOnly } from "@/server/mode";
+import { readSnapshot, SNAPSHOT_PATHS } from "@/server/snapshot";
 
 /**
  * Forwards /api/backend/<path> to the evaluation backend's local API (`raieval serve`,
@@ -23,7 +25,23 @@ function fromAnotherSite(request: NextRequest): boolean {
   }
 }
 
+/** READ_ONLY=1: the option lists come from the saved snapshot; nothing reaches a backend. */
+function fromSnapshot(path: string[], method: "GET" | "POST") {
+  const name = path.join("/");
+  if (method === "GET" && name === "jobs/active") return NextResponse.json(null);
+  if (method === "GET" && (SNAPSHOT_PATHS as readonly string[]).includes(name)) {
+    const snapshot = readSnapshot();
+    if (snapshot && name in snapshot) return NextResponse.json(snapshot[name]);
+    return NextResponse.json(
+      { detail: "This site has no saved evaluation options (data/backend-snapshot.json; see DEPLOY.md)." },
+      { status: 503 },
+    );
+  }
+  return NextResponse.json({ detail: "Running evaluations is turned off on this site." }, { status: 403 });
+}
+
 async function forward(request: NextRequest, path: string[], method: "GET" | "POST") {
+  if (readOnly()) return fromSnapshot(path, method);
   if (fromAnotherSite(request)) {
     return NextResponse.json({ detail: "Requests from other sites are not allowed." }, { status: 403 });
   }
