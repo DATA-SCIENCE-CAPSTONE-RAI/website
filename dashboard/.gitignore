@@ -5,3 +5,5 @@ data/*.sqlite
 data/backend-snapshot.json
 *.tsbuildinfo
 .vercel
+.env*
+!.env.example
