@@ -26,8 +26,9 @@ function axisMax(data: ChartRow[], model: string): number {
   return Math.ceil(max * 1.3 * 20) / 20;
 }
 
+/** A measured 0 is a result ("no failures"), so it is labelled; only a missing value stays blank. */
 function barLabel(value: unknown): string {
-  if (typeof value !== "number" || Number.isNaN(value) || value === 0) return "";
+  if (typeof value !== "number" || Number.isNaN(value)) return "";
   return value.toFixed(3);
 }
 
@@ -94,7 +95,8 @@ export function BenchmarkChart({ title, model, data, caption, emptyLabel, onOpen
   const max = axisMax(data, model);
   const domain = useMemo(() => [0, max] as [number, number], [max]);
   const { ref, size } = useElementSize();
-  const patternId = `average-stripe-${title.replace(/\s+/g, "-").toLowerCase()}`;
+  // only letters, digits and dashes: "(" or ")" in an id breaks url(#...) and the bar renders black
+  const patternId = `average-stripe-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   const longestLabel = data.reduce((max, row) => Math.max(max, String(row.axis).length), 0);
   const crowded = data.length > 8;
   const narrow = size.width > 0 && (crowded || size.width < (longestLabel > 12 ? 760 : 480));
@@ -173,6 +175,7 @@ export function BenchmarkChart({ title, model, data, caption, emptyLabel, onOpen
               dataKey={model}
               radius={[3, 3, 0, 0]}
               maxBarSize={42}
+              minPointSize={(value: unknown) => (typeof value === "number" ? 2 : 0)}
               isAnimationActive={false}
               cursor="pointer"
               onClick={(bar) => {
@@ -190,6 +193,7 @@ export function BenchmarkChart({ title, model, data, caption, emptyLabel, onOpen
               dataKey={AVERAGE_SERIES}
               radius={[3, 3, 0, 0]}
               maxBarSize={42}
+              minPointSize={(value: unknown) => (typeof value === "number" ? 2 : 0)}
               isAnimationActive={false}
               cursor="pointer"
               onClick={(bar) => {

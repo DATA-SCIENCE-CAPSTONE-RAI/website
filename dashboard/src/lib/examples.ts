@@ -1,7 +1,6 @@
-import type { Flag } from "@/lib/score";
-import type { DerivedReply } from "@/lib/types";
+import type { Reply, TestName } from "@/lib/types";
 
-export type BenchmarkName = "BBQ" | "BBG" | "WildGuard" | "SYCON";
+export type BenchmarkName = TestName;
 
 export type ScoreChip = {
   label: string;
@@ -18,88 +17,44 @@ export type PromptCard = {
   scores: ScoreChip[];
 };
 
-function flagText(flag: Flag | null): string {
-  if (flag === null) return "—";
-  return flag.toFixed(3);
-}
+const RESULT_LABEL: Record<string, string> = { pass: "Pass", fail: "Fail", warn: "Warning" };
 
-function chip(label: string, value: string, emphasis: boolean): ScoreChip {
-  return { label, value, emphasis };
-}
-
-function card(options: {
-  id: string;
-  failed: boolean;
-  prompt: string;
-  lead: string;
-  highlight: string | null;
-  scores: ScoreChip[];
-}): PromptCard {
+/** Fail and warn are flagged; warn is not a failure (a BBG story that blames a person, say). */
+function card(reply: Reply): PromptCard {
+  const flagged = reply.result !== "pass";
+  const pushback = reply.test === "Pushback";
+  const scores: ScoreChip[] = [
+    { label: "Result", value: RESULT_LABEL[reply.result ?? ""] ?? reply.result ?? "—", emphasis: true },
+  ];
+  if (reply.resultReason) scores.push({ label: "Why", value: reply.resultReason, emphasis: false });
+  if (reply.status && reply.status !== "ok") scores.push({ label: "Reply status", value: reply.status, emphasis: false });
+  if (reply.notes) scores.push({ label: "Judge notes", value: reply.notes, emphasis: false });
   return {
-    id: options.id,
-    heading: options.failed ? "Flagged response" : "Reference response",
-    prompt: options.prompt,
-    lead: options.lead,
-    highlight: options.highlight,
-    scores: options.scores,
+    id: reply.id,
+    heading: flagged ? "Flagged response" : "Reference response",
+    prompt: reply.prompt ?? "",
+    lead: pushback
+      ? `Turn ${reply.turn ?? "?"}: "${reply.lastUserMessage ?? ""}" Reply: ${reply.response ?? "—"}`
+      : (reply.response ?? "—"),
+    highlight: reply.evidence,
+    scores,
   };
-}
-
-function bbqCards(axis: string, rows: DerivedReply[]): PromptCard[] {
-  return rows.flatMap((row) => {
-    if (row.test !== "BBQ" || row.cls !== axis) return [];
-    if (row.answerCorrect !== 0 && row.answerCorrect !== 1) return [];
-    return [
-      card({
-        id: `reply-${row.id}`,
-        failed: row.answerCorrect === 0,
-        prompt: [row.replyId, row.variant, row.cls].filter(Boolean).join(" · "),
-        lead:
-          row.expectedLetter || row.selectedLetter
-            ? `Expected ${row.expectedLetter ?? "—"}, selected ${row.selectedLetter ?? "—"}.`
-            : "",
-        highlight: row.readBy ? `Read by ${row.readBy}.` : null,
-        scores: [
-          chip("Answer correct", flagText(row.answerCorrect), true),
-          chip("Appropriate abstention", flagText(row.appropriateAbstention), false),
-        ],
-      }),
-    ];
-  });
-}
-
-function bbgCards(axis: string, rows: DerivedReply[]): PromptCard[] {
-  return rows.flatMap((row) => {
-    if (row.test !== "BBG" || row.cls !== axis) return [];
-    if (row.namesAPerson !== 0 && row.namesAPerson !== 1) return [];
-    return [
-      card({
-        id: `reply-${row.id}`,
-        failed: row.namesAPerson === 1,
-        prompt: [row.replyId, row.cls].filter(Boolean).join(" · "),
-        lead: `Negative actor ${row.negativeActor ?? "—"}. Positive actor ${row.positiveActor ?? "—"}.`,
-        highlight: null,
-        scores: [
-          chip("Names a person", flagText(row.namesAPerson), true),
-          chip("Stereotype reinforced", flagText(row.reinforced), false),
-          chip("Stereotype challenged", flagText(row.challenged), false),
-        ],
-      }),
-    ];
-  });
 }
 
 export function promptsForAxis(
   benchmark: BenchmarkName,
   axis: string,
   model: string,
-  replies: DerivedReply[],
-): { flagged: PromptCard[]; reference: PromptCard[] } {
-  const rows = replies.filter((row) => row.model === model);
-  const prompts =
-    benchmark === "BBQ" ? bbqCards(axis, rows) : benchmark === "BBG" ? bbgCards(axis, rows) : [];
+  replies: Reply[],
+): { flagged: PromptCard[]; reference: PromptCard[]; flaggedTotal: number; referenceTotal: number } {
+  const rows = replies.filter((row) => row.model === model && row.test === benchmark && row.cls === axis && row.result);
+  const flaggedRows = rows.filter((row) => row.result !== "pass");
+  const passedRows = rows.filter((row) => row.result === "pass");
   return {
-    flagged: prompts.filter((prompt) => prompt.heading === "Flagged response"),
-    reference: prompts.filter((prompt) => prompt.heading === "Reference response"),
+    flagged: flaggedRows.map(card),
+    reference: passedRows.map(card),
+    // the page gets a capped number of examples per group; these are the real counts
+    flaggedTotal: flaggedRows[0]?.groupTotal ?? 0,
+    referenceTotal: passedRows[0]?.groupTotal ?? 0,
   };
 }

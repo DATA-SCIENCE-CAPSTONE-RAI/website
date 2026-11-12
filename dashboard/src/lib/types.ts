@@ -1,78 +1,50 @@
-import type { Flag } from "@/lib/score";
+/** Shapes read from the evaluation backend's results database (src/server/db.ts). */
 
-export type EvaluationRun = {
-  id: number;
-  judgeName: string;
-  evaluationDate: string;
-  inputWorkbookName: string;
-  evaluationPromptVersion: string;
-  evaluatedModels: string;
-  numberOfCasesEvaluated: number;
-  numberOfModelResponsesEvaluated: number;
-  numberOfSyconTurnsEvaluated: number;
-  evaluationNotes: string | null;
-};
+export type TestName = "BBQ" | "BBG" | "Safety" | "Pushback";
 
-export type CaseEvaluation = {
-  id: number;
-  runId: number;
-  caseId: string;
-  sourceSheet: string;
-  sourceRow: number;
-  taskType: string;
-  protectedClassCategory: string | null;
-  promptVariant: string | null;
-  evaluatedModel: string;
-  bbqStereotypeAnswer: Flag;
-  bbqCounterStereotypeAnswer: Flag;
-  bbqUnknownAnswer: Flag;
-  bbqAnswerCorrect: Flag;
-  bbqContextAnswerable: Flag;
-  bbqAppropriateAbstention: Flag;
-  bbqAnswerWhenAnswerable: Flag;
-  bbgPairId: string | null;
-  bbgVersion: string | null;
-  bbgPrimaryStereotypeReinforced: Flag;
-  bbgPrimaryStereotypeChallenged: Flag;
-  wildguardResponseHarmful: Flag;
-  wildguardResponseRefusal: Flag;
-  evaluationEvidence: string | null;
-  evaluationExplanation: string | null;
-  judgmentConfidence: string | null;
-  nullReason: string | null;
-  judgeNotes: string | null;
-};
-
-export type DerivedReply = {
-  id: number;
+/** One release scored with one judge: what the dashboard shows at a time. */
+export type ScoreView = {
+  release: string;
   judge: string;
+  scoredAt: string;
+  methodVersion: string | null;
+  models: number;
+};
+
+/** BBG: signed bias_gen (+ = leans toward the stereotype) with its 95% interval and reading. */
+export type BiasGen = {
+  value: number | null;
+  low: number | null;
+  high: number | null;
+  reading: string | null;
+};
+
+/** Agreement between the shown judge and another judge on one model and test. */
+export type Agreement = {
   model: string;
   test: string;
-  replyId: string;
-  cls: string | null;
-  variant: string | null;
-  answerCorrect: Flag | null;
-  appropriateAbstention: Flag | null;
-  reinforced: Flag | null;
-  challenged: Flag | null;
-  namesAPerson: Flag | null;
-  negativeActor: string | null;
-  positiveActor: string | null;
-  expectedLetter: string | null;
-  selectedLetter: string | null;
-  readBy: string | null;
+  otherJudge: string;
+  kappa: number | null;
+  /** Share of labels that match, 0 to 1. */
+  agreement: number | null;
+  n: number | null;
 };
 
-export type SyconTurn = {
-  id: number;
-  runId: number;
-  caseId: string;
-  syconConversationId: string;
-  evaluatedModel: string;
-  syconTurnNumber: number;
-  syconSycophanticFlip: Flag;
-  syconEvidence: string | null;
-  syconJudgmentNotes: string | null;
-  judgmentConfidence: string | null;
-  nullReason: string | null;
+/** One scored reply (pushback: one conversation, shown by its last turn). */
+export type Reply = {
+  id: string;
+  model: string;
+  test: TestName;
+  cls: string;
+  prompt: string | null;
+  lastUserMessage: string | null;
+  turn: number | null;
+  response: string | null;
+  status: string | null;
+  result: string | null;
+  resultReason: string | null;
+  evidence: string | null;
+  notes: string | null;
+  /** How many replies share this one's model, test, class and passed/flagged group (only some are sent). */
+  groupTotal: number;
 };

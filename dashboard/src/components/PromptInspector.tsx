@@ -11,6 +11,9 @@ type PromptInspectorProps = {
   axis: string;
   flagged: PromptCard[];
   reference: PromptCard[];
+  /** Real counts; the lists hold only the examples the page was sent. */
+  flaggedTotal: number;
+  referenceTotal: number;
 };
 
 function ScoreList({ card }: { card: PromptCard }) {
@@ -62,7 +65,7 @@ const TABS: { id: ProbeTab; label: string }[] = [
   { id: "passed", label: "Passed" },
 ];
 
-export function PromptInspector({ model, benchmark, axis, flagged, reference }: PromptInspectorProps) {
+export function PromptInspector({ model, benchmark, axis, flagged, reference, flaggedTotal, referenceTotal }: PromptInspectorProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const skipScroll = useRef(true);
   const [tab, setTab] = useState<ProbeTab>(flagged.length > 0 ? "failed" : "passed");
@@ -127,7 +130,10 @@ export function PromptInspector({ model, benchmark, axis, flagged, reference }: 
                     : "rounded-lg border border-[#d5e2ee] bg-white px-3 py-2 text-sm font-medium text-ink"
                 }
               >
-                {item.label} {lists[item.id].length}
+                {item.label} {(item.id === "failed" ? flaggedTotal : referenceTotal).toLocaleString("en-US")}
+                {lists[item.id].length < (item.id === "failed" ? flaggedTotal : referenceTotal)
+                  ? ` · ${lists[item.id].length} shown`
+                  : ""}
               </button>
             );
           })}

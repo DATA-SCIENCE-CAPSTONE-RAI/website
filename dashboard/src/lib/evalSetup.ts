@@ -1,15 +1,42 @@
-/** Setup rules mirrored from tool-backend/raieval/run/runner.py so the preview matches that contract. */
+/**
+ * Setup choices for the evaluation page. Checks, item counts and cost come from the backend
+ * (`raieval serve`, see src/lib/backend.ts); this file only holds the form's own rules.
+ */
 
+/** A free mock model in the backend: no key, no network call; recorded as mockllm/random. */
 export const DEMO_MODEL = "demo/random";
-export const MOCK_MODEL = "mockllm/model";
 
 export const STAGES = [
-  { id: "mcq", label: "Stage 1: multiple choice (BBQ format)", test: "BBQ" },
-  { id: "open", label: "Stage 2: open-ended stories (BBG format)", test: "BBG" },
-  { id: "safety", label: "Stage 3: safety (WildGuardTest)", test: "Safety" },
+  {
+    id: "mcq",
+    label: "Multiple choice (BBQ format)",
+    test: "BBQ",
+    about: "Questions about two people where the right answer is often \"can't be determined\".",
+  },
+  {
+    id: "open",
+    label: "Open-ended stories (BBG format)",
+    test: "BBG",
+    about: "The model continues a story about two people; judges read who it blames.",
+  },
+  {
+    id: "safety",
+    label: "Safety (WildGuardTest)",
+    test: "Safety",
+    about: "Harmful and harmless requests: does it refuse the harmful ones and help with the rest?",
+  },
+  {
+    id: "pushback",
+    label: "Pushback conversations",
+    test: "Pushback",
+    about: "The user pushes back four times: does the model keep a justified answer?",
+  },
 ] as const;
 
 export type StageId = (typeof STAGES)[number]["id"];
+
+/** Stages whose replies are labelled by LLM judges (multiple choice is read without one). */
+export const JUDGED_STAGES: StageId[] = ["open", "safety", "pushback"];
 
 export const TESTS = ["BBQ", "BBG", "Safety", "Pushback"] as const;
 export type TestName = (typeof TESTS)[number];
@@ -18,47 +45,49 @@ export type EvalWeights = Record<TestName, number>;
 export const DEFAULT_EVAL_WEIGHTS: EvalWeights = { BBQ: 25, BBG: 25, Safety: 25, Pushback: 25 };
 
 export const TEST_LABELS: Record<TestName, string> = {
-  BBQ: "BBQ (stage 1)",
-  BBG: "BBG (stage 2)",
-  Safety: "WildGuardTest (stage 3)",
-  Pushback: "Pushback / sycophancy (SYCON)",
+  BBQ: "BBQ (multiple choice)",
+  BBG: "BBG (stories)",
+  Safety: "Safety (WildGuardTest)",
+  Pushback: "Pushback",
 };
-
-/** Team NY classes from data_collection config/categories.yaml. */
-export const NY_CLASSES: Array<{ id: string; label: string }> = [
-  { id: "ny_age", label: "Age" },
-  { id: "ny_arrest_record", label: "Arrest record" },
-  { id: "ny_citizenship", label: "Citizenship or immigration" },
-  { id: "ny_conviction_record", label: "Conviction record" },
-  { id: "ny_creed_religion", label: "Creed or religion" },
-  { id: "ny_disability", label: "Disability" },
-  { id: "ny_dv_victim_status", label: "DV victim status" },
-  { id: "ny_familial_status", label: "Familial status" },
-  { id: "ny_gender_identity", label: "Gender identity or expression" },
-  { id: "ny_genetic", label: "Genetic characteristics" },
-  { id: "ny_marital_status", label: "Marital status" },
-  { id: "ny_military_status", label: "Military status" },
-  { id: "ny_national_origin", label: "National origin" },
-  { id: "ny_pregnancy", label: "Pregnancy-related condition" },
-  { id: "ny_race_color", label: "Race or color" },
-  { id: "ny_retaliation", label: "Retaliation" },
-  { id: "ny_sex", label: "Sex" },
-  { id: "ny_sexual_orientation", label: "Sexual orientation" },
-  { id: "ny_source_of_income", label: "Lawful source of income" },
-];
-
-/** Lite release: 45 templates per class, 8 MCQ items and 2 open items each. Safety is the full gated set. */
-const LITE_PER_CLASS = { mcq: 45 * 8, open: 45 * 2 } as const;
-const SAFETY_ITEMS = 1699;
 
 export type EvalDraft = {
   model: string;
   stages: StageId[];
   lite: boolean;
   categories: string[];
-  judges: string;
+  /** Safety: null = every prompt; N = a test sample of N prompts (checks the path cheaply). */
+  safetySample: number | null;
+  /** Judges ticked in the list, plus any typed under "Other judges". */
+  judges: string[];
+  extraJudges: string;
   weights: EvalWeights;
 };
+
+/** Backend weights are shares summing to 1; the form uses whole percents. */
+export function weightsFromBackend(shares: Record<string, number>): EvalWeights {
+  const out = { ...DEFAULT_EVAL_WEIGHTS };
+  for (const test of TESTS) if (typeof shares[test] === "number") out[test] = Math.round(shares[test] * 100);
+  return weightProblems(out).length ? DEFAULT_EVAL_WEIGHTS : out;
+}
+
+export function weightsToBackend(weights: EvalWeights): Record<string, number> {
+  return Object.fromEntries(TESTS.map((test) => [test, weights[test] / 100]));
+}
+
+export const OTHER = "__other__";
+
+/** Every judge chosen: ticked ones first, then typed ones, without repeats. */
+export function chosenJudges(draft: EvalDraft): string[] {
+  return [...new Set([...draft.judges, ...judgeList(draft.extraJudges)])];
+}
+
+export function judgeList(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 export function rebalanceEvalWeights(current: EvalWeights, key: TestName, nextValue: number): EvalWeights {
   const requested = Math.round(Math.min(100, Math.max(0, nextValue)));
@@ -99,60 +128,47 @@ export function weightProblems(weights: EvalWeights): string[] {
   return [];
 }
 
-/** Reasons start() would fail before the slower release checks. Safety prompts are not on this machine. */
-export function problems(draft: EvalDraft): string[] {
+/** Problems the form can see before asking the backend. */
+export function formProblems(draft: EvalDraft): string[] {
   const out: string[] = [];
   if (draft.stages.length === 0) out.push("Pick at least one stage.");
-  if ((draft.stages.includes("mcq") || draft.stages.includes("open")) && draft.categories.length === 0) {
-    out.push("Pick at least one protected class.");
-  }
-  if (draft.stages.includes("safety")) {
-    out.push(
-      "The safety stage needs the WildGuardTest prompts locally: add HF_TOKEN to .env and run `make wildguardtest`.",
-    );
-  }
-  if (!/^[\w.-]+\/\S+$/.test(draft.model.trim())) {
-    out.push("Model must look like provider/model, e.g. openai/gpt-4o-mini.");
+  const needsClasses = draft.stages.some((stage) => stage !== "safety");
+  if (needsClasses && draft.categories.length === 0) out.push("Pick at least one protected class.");
+  if (!/^[\w.-]+\/\S+$/.test(draft.model.trim())) out.push("Model must look like provider/model, e.g. openai/gpt-4o-mini.");
+  if (draft.stages.includes("safety") && draft.safetySample !== null && !(draft.safetySample >= 1)) {
+    out.push("A safety test sample needs at least 1 prompt.");
   }
   out.push(...weightProblems(draft.weights));
   return out;
 }
 
-export function warnings(draft: EvalDraft): string[] {
-  const notes: string[] = [];
-  const model = draft.model.trim();
-  if (model !== DEMO_MODEL && model !== MOCK_MODEL) {
-    notes.push("Credentials for this provider are checked on the evaluation machine. This preview does not read API keys.");
-  }
-  if (draft.judges.trim()) {
-    notes.push("Judge models are saved with the setup. Judging runs later, as its own step, and is not part of this run.");
-  }
-  if (!draft.lite) {
-    notes.push("Item counts for a full split are computed by the evaluation package from the release. This preview only knows the lite counts.");
-  }
-  notes.push("Pushback is not built yet, so that weight is recorded and then left out of the overall score.");
-  return notes;
-}
+export type StageSize = { items: number; calls: number; unit: string };
 
-/** Item counts for the selected stages. Null means this preview cannot compute that count. */
-export function plan(draft: EvalDraft): Record<StageId, number | null> {
-  const selected = draft.categories.length;
-  const counts = {} as Record<StageId, number | null>;
+/** What each chosen stage sends, from the backend's item counts: the same numbers the check gives. */
+export function stageSizes(draft: EvalDraft, sizes: import("@/lib/backend").Sizes | null): Partial<Record<StageId, StageSize>> {
+  if (!sizes) return {};
+  const size = draft.lite ? "lite" : "full";
+  const sum = (byClass: Record<string, { lite: number; full: number }>) =>
+    draft.categories.reduce((total, id) => total + (byClass[id]?.[size] ?? 0), 0);
+  const out: Partial<Record<StageId, StageSize>> = {};
   for (const stage of draft.stages) {
-    if (stage === "safety") counts.safety = SAFETY_ITEMS;
-    else if (!draft.lite) counts[stage] = null;
-    else counts[stage] = LITE_PER_CLASS[stage] * selected;
+    if (stage === "mcq") {
+      const n = sum(sizes.mcq);
+      out.mcq = { items: n, calls: n, unit: "questions" };
+    } else if (stage === "open") {
+      const n = sum(sizes.open);
+      out.open = { items: n, calls: n, unit: "stories" };
+    } else if (stage === "safety") {
+      const n = draft.safetySample ?? sizes.safety[size];
+      out.safety = { items: Math.min(n, sizes.safety.full), calls: Math.min(n, sizes.safety.full), unit: "prompts" };
+    } else {
+      const n = sizes.pushback.per_class * draft.categories.length + sizes.pushback.safety;
+      out.pushback = { items: n, calls: n * sizes.pushback.turns, unit: "conversations" };
+    }
   }
-  return counts;
+  return out;
 }
 
-export function planTotal(counts: Record<string, number | null>): number | null {
-  const values = Object.values(counts);
-  if (values.length === 0 || values.some((value) => value === null)) return null;
-  let total = 0;
-  for (const value of values) {
-    if (value === null) return null;
-    total += value;
-  }
-  return total;
+export function formatCount(value: number | null | undefined): string {
+  return value === null || value === undefined ? "—" : value.toLocaleString("en-US");
 }

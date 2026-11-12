@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Responsible AI benchmark",
-  description: "Bias, safety, and sycophancy scores for BBQ, BBG, WildGuard, and SYCON.",
+  description: "Bias, safety, and sycophancy scores for BBQ, BBG, Safety (WildGuardTest), and Pushback.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
