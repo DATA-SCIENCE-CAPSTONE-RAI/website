@@ -8,7 +8,8 @@ page, but cannot check, estimate or start a run. Every visitor is asked for a pa
 | Setting | Effect |
 |---|---|
 | `READ_ONLY=1` | The Evaluation page shows every option from the saved lists; checking and running are turned off. The `/api/backend` proxy answers only those lists and refuses everything else; it never contacts a backend. |
-| `SITE_PASSWORD` | Every page asks for this password (any user name). Unset = no password. |
+| `SITE_PASSWORD` | Every page asks for this password. Unset = no password. |
+| `SITE_USERNAME` | The user name must match too. Unset = any user name. |
 
 **Never commit the database or the snapshot** (`data/results.sqlite`, `data/backend-snapshot.json`;
 both gitignored). The database holds prompts from gated datasets (WildGuardTest) and model
@@ -29,6 +30,7 @@ npm run snapshot          # the Evaluation page's option lists; needs `uv run ra
 npx vercel login
 npx vercel link                       # first time: create the project
 npx vercel env add READ_ONLY production        # value: 1
+npx vercel env add SITE_USERNAME production    # value: the user name you give out
 npx vercel env add SITE_PASSWORD production    # value: the password you give out
 
 npx vercel pull --yes --environment=production
@@ -43,5 +45,5 @@ if models, judges or classes changed), then repeat the last three commands.
 
 ```sh
 npm run build
-READ_ONLY=1 SITE_PASSWORD=test npm start      # http://localhost:3000, any user name, password "test"
+READ_ONLY=1 SITE_USERNAME=demo SITE_PASSWORD=test npm start   # http://localhost:3000, log in as demo / test
 ```
