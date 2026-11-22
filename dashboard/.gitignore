@@ -2,4 +2,8 @@ node_modules
 .next
 .env.local
 data/*.sqlite
+data/backend-snapshot.json
 *.tsbuildinfo
+.vercel
+.env*
+!.env.example

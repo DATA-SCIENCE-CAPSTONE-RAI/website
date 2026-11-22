@@ -107,7 +107,9 @@ function JobProgress({ job }: { job: Job }) {
   );
 }
 
-export function EvalWizard() {
+/** `readOnly`: a hosted demo (READ_ONLY=1) where every option can be explored, but nothing is
+ * checked or run; the lists come from a saved snapshot, so key status does not apply. */
+export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<EvalDraft>(INITIAL);
   const [uploadConfirmed, setUploadConfirmed] = useState(false);
@@ -130,6 +132,7 @@ export function EvalWizard() {
   const [job, setJob] = useState<Job | null>(null);
   const [lastRun, setLastRun] = useState<Job | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const usable = (item: { ready: boolean }) => readOnly || item.ready;
 
   const load = useCallback(async () => {
     try {
@@ -149,20 +152,26 @@ export function EvalWizard() {
       setProviderKeys(keyRows);
       setPanel(judges);
       setCatalog(models);
+      const realModels = (models?.models ?? []).filter((item) => !item.demo);
       setDraft((value) => ({
         ...value,
+        // a demo site cannot run, so the free mock model has nothing to show: start on a real model
+        model:
+          readOnly && value.model.startsWith("demo/") && realModels.length
+            ? (realModels.find((item) => item.default) ?? realModels[0]).id
+            : value.model,
         categories: value.categories.length ? value.categories : cats.map((item) => item.id),
         // default panel judges that have a key; the user can tick demo judges for a free run
         judges: value.judges.length
           ? value.judges
-          : (models?.judges ?? []).filter((item) => item.default && item.ready).map((item) => item.id),
+          : (models?.judges ?? []).filter((item) => item.default && usable(item)).map((item) => item.id),
         weights: weightsFromBackend(weights),
       }));
       if (current.active_job) setJob(current.active_job);
     } catch (error) {
       setOffline(errorText(error));
     }
-  }, []);
+  }, [readOnly]);
 
   useEffect(() => {
     void load();
@@ -258,10 +267,21 @@ export function EvalWizard() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Evaluation setup</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted">
-          Model, dataset and judges, then a check of what the run would send and cost. The run, judging and scoring
-          happen in the evaluation backend on this machine; results appear on the Scores page.
+          {readOnly
+            ? "Model, dataset and judges: the choices a run is set up with. Results appear on the Scores page."
+            : "Model, dataset and judges, then a check of what the run would send and cost. The run, judging and scoring happen in the evaluation backend on this machine; results appear on the Scores page."}
         </p>
       </header>
+
+      {readOnly ? (
+        <section className="mt-6 rounded-2xl border border-[#ecd9a7] bg-[#fdf8ea] p-5 text-sm text-ink">
+          <p className="font-medium">Demo: explore every option; running is turned off.</p>
+          <p className="mt-1 text-muted">
+            This site has no evaluation backend, so checks, cost estimates and runs are not available. To run an
+            evaluation, install the evaluation backend on your own machine with your own API keys.
+          </p>
+        </section>
+      ) : null}
 
       {offline ? (
         <section className="mt-6 rounded-2xl border border-[#e7c2c2] bg-[#fdf3f3] p-5 text-sm text-ink">
@@ -271,7 +291,7 @@ export function EvalWizard() {
             Try again
           </button>
         </section>
-      ) : status ? (
+      ) : readOnly ? null : status ? (
         <p className="mt-3 text-sm text-muted">
           Backend connected · release {status.release}
           {status.db_exists ? "" : " · no results yet"}
@@ -301,10 +321,12 @@ export function EvalWizard() {
       {step === 0 ? (
         <section className={`mt-6 ${card}`}>
           <h2 className="text-lg font-semibold text-ink">Model</h2>
-          <p className="mt-1 text-sm text-muted">
-            Use <span className="font-medium text-ink">{DEMO_MODEL}</span> to try a run with no API key and no cost (mock
-            answers that mean nothing).
-          </p>
+          {readOnly ? null : (
+              <p className="mt-1 text-sm text-muted">
+                Use <span className="font-medium text-ink">{DEMO_MODEL}</span> to try a run with no API key and no cost (mock
+                answers that mean nothing).
+              </p>
+          )}
           <label className="mt-4 block text-sm font-medium text-ink" htmlFor="eval-model">
             Model
           </label>
@@ -318,20 +340,22 @@ export function EvalWizard() {
             }}
             className="mt-2 w-full max-w-md rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink"
           >
-            <optgroup label="Free demo (no key, no cost)">
-              {(catalog?.models ?? []).filter((item) => item.demo).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.id} (mock answers)
-                </option>
-              ))}
-            </optgroup>
+            {readOnly ? null : (
+              <optgroup label="Free demo (no key, no cost)">
+                {(catalog?.models ?? []).filter((item) => item.demo).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.id} (mock answers)
+                  </option>
+                ))}
+              </optgroup>
+            )}
             {(catalog?.providers ?? []).map((provider) => {
               const models = (catalog?.models ?? []).filter((item) => !item.demo && item.provider === provider.provider);
               if (!models.length) return null;
               return (
-                <optgroup key={provider.provider} label={`${provider.label}${provider.ready ? "" : " (no key)"}`}>
+                <optgroup key={provider.provider} label={`${provider.label}${usable(provider) ? "" : " (no key)"}`}>
                   {models.map((item) => (
-                    <option key={item.id} value={item.id} disabled={!item.ready}>
+                    <option key={item.id} value={item.id} disabled={!usable(item)}>
                       {item.id}
                     </option>
                   ))}
@@ -349,10 +373,10 @@ export function EvalWizard() {
               placeholder="provider/model"
             />
           ) : null}
-          {!draft.model.startsWith("demo/") ? (
+          {!readOnly && !draft.model.startsWith("demo/") ? (
             <p className="mt-2 text-sm text-muted">This model is called with the backend&apos;s API key, and calls are billed.</p>
           ) : null}
-          {providerKeys.length ? (
+          {!readOnly && providerKeys.length ? (
             <div className="mt-4 text-sm">
               <p className="font-medium text-ink">Providers with a key on the backend machine</p>
               <p className="mt-1 text-muted">
@@ -572,24 +596,23 @@ export function EvalWizard() {
           <p className="mt-1 text-sm text-muted">
             One model per line, as provider/model. Judges label stories, safety replies and pushback turns after the
             model run; multiple choice is read without a judge. Each judge is scored on its own and never merged, and
-            agreement between judges is reported. Demo judges are free
-            mocks for trying the flow.
+            agreement between judges is reported.{readOnly ? "" : " Demo judges are free mocks for trying the flow."}
           </p>
           <fieldset className="mt-4 space-y-2">
             <legend className="text-sm font-medium text-ink">Judge models</legend>
-            {(catalog?.judges ?? []).map((item) => (
-              <label key={item.id} className={`flex items-center gap-2 text-sm ${item.ready ? "text-ink" : "text-muted"}`}>
+            {(catalog?.judges ?? []).filter((item) => !(readOnly && item.demo)).map((item) => (
+              <label key={item.id} className={`flex items-center gap-2 text-sm ${usable(item) ? "text-ink" : "text-muted"}`}>
                 <input
                   type="checkbox"
                   className="h-4 w-4 accent-ink"
-                  disabled={!item.ready}
+                  disabled={!usable(item)}
                   checked={draft.judges.includes(item.id)}
                   onChange={() => update({ judges: toggle(draft.judges, item.id) })}
                 />
                 {item.id}
                 {item.demo ? " (free mock)" : ""}
                 {item.default ? " · default" : ""}
-                {item.ready ? "" : " · no key"}
+                {usable(item) ? "" : " · no key"}
               </label>
             ))}
           </fieldset>
@@ -666,7 +689,7 @@ export function EvalWizard() {
               <button
                 type="button"
                 className={secondary}
-                disabled={blocking.length > 0 || Boolean(offline) || busy !== null}
+                disabled={readOnly || blocking.length > 0 || Boolean(offline) || busy !== null}
                 onClick={checkRun}
               >
                 {busy === "Checking" ? "Checking… (a few seconds)" : "Check and estimate"}
@@ -674,12 +697,15 @@ export function EvalWizard() {
               <button
                 type="button"
                 className={primary}
-                disabled={!planIsCurrent || !plan?.ready || running || busy !== null}
+                disabled={readOnly || !planIsCurrent || !plan?.ready || running || busy !== null}
                 onClick={startRun}
               >
                 {busy === "Starting" ? "Starting…" : "Start run"}
               </button>
             </div>
+            {readOnly ? (
+              <p className="mt-3 text-sm text-muted">Checking and running are turned off on this demo site.</p>
+            ) : null}
             {plan && !planIsCurrent ? (
               <p className="mt-3 text-sm text-muted">The setup changed since the check. Check again before starting.</p>
             ) : null}
@@ -722,6 +748,7 @@ export function EvalWizard() {
             ) : null}
           </div>
 
+          {readOnly ? null : (
           <div className={card}>
             <h2 className="text-lg font-semibold text-ink">Progress</h2>
             {job ? (
@@ -788,6 +815,7 @@ export function EvalWizard() {
               </div>
             ) : null}
           </div>
+          )}
         </section>
       ) : null}
 
