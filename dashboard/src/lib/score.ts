@@ -25,6 +25,8 @@ export type ModelSummary = {
   wgN: number | null;
   syconN: number | null;
   bbgBiasGen: BiasGen | null;
+  /** The weight each test had in the overall score (after leaving out tests with no results). */
+  weights: Array<{ test: string; weight: number }>;
   /** Tests scored on part of the data, with the backend's note; `kind` is how to show it. */
   subsets: Array<{ test: string; note: string; kind: "lite" | "sample" }>;
   bbqByClass: RatePoint[];
@@ -150,6 +152,9 @@ export function summariesFromTables(
       wgN: safety?.n ?? null,
       syconN: pushback?.n ?? null,
       bbgBiasGen: biasGen[model] ?? null,
+      weights: summaryRows
+        .filter((row) => row.model === model && row.test !== "overall" && row.weight !== null)
+        .map((row) => ({ test: row.test, weight: row.weight as number })),
       subsets: summaryRows
         .filter((row) => row.model === model && row.subset)
         .map((row) => ({

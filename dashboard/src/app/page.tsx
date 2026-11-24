@@ -1,5 +1,6 @@
 import { Dashboard } from "@/components/Dashboard";
 import { summariesFromTables } from "@/lib/score";
+import { isUploadRelease } from "@/lib/types";
 import {
   databaseExists,
   getAgreement,
@@ -60,6 +61,7 @@ export default async function Home({
   const view =
     views.find((item) => item.release === params.release && item.judge === params.judge) ??
     views.find((item) => item.release === params.release) ??
+    views.find((item) => !isUploadRelease(item.release)) ??     // the dataset first; uploads are picked
     views[0] ??
     null;
 

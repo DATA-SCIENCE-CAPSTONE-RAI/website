@@ -13,8 +13,12 @@ import {
   type Sizes,
   type ProviderKey,
   type RunPlan,
+  type SavedUpload,
+  type UploadFormat,
 } from "@/lib/backend";
+import { PromptUpload } from "@/components/PromptUpload";
 import {
+  DATA_SOURCES,
   DEFAULT_EVAL_WEIGHTS,
   DEMO_MODEL,
   JUDGED_STAGES,
@@ -26,7 +30,10 @@ import {
   formProblems,
   formatCount,
   rebalanceEvalWeights,
+  setEvalWeight,
   stageSizes,
+  usesDataset,
+  usesUploads,
   weightsFromBackend,
   weightsToBackend,
   type EvalDraft,
@@ -38,6 +45,8 @@ const STEPS = ["Model", "Dataset", "Judges", "Confirm"] as const;
 
 const INITIAL: EvalDraft = {
   model: DEMO_MODEL,
+  source: null,
+  uploads: [],
   stages: ["mcq", "open"],
   lite: true,
   categories: [],
@@ -112,8 +121,6 @@ function JobProgress({ job }: { job: Job }) {
 export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<EvalDraft>(INITIAL);
-  const [uploadConfirmed, setUploadConfirmed] = useState(false);
-  const [uploadName, setUploadName] = useState<string | null>(null);
 
   const [status, setStatus] = useState<BackendStatus | null>(null);
   const [offline, setOffline] = useState<string | null>(null);
@@ -122,6 +129,8 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
   const [panel, setPanel] = useState<JudgePanel | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [sizes, setSizes] = useState<Sizes | null>(null);
+  const [uploads, setUploads] = useState<SavedUpload[]>([]);
+  const [uploadFormat, setUploadFormat] = useState<UploadFormat | null>(null);
   const [typingModel, setTypingModel] = useState(false);
 
   const [plan, setPlan] = useState<RunPlan | null>(null);
@@ -145,6 +154,8 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
         backend.models().catch(() => null),
       ]);
       backend.sizes().then(setSizes).catch(() => setSizes(null));   // sizes are a convenience: never block on them
+      backend.uploads().then(setUploads).catch(() => setUploads([]));
+      backend.uploadFormat().then(setUploadFormat).catch(() => setUploadFormat(null));
       // "connected" only once every list is in, so the form never shows half-loaded choices
       setStatus(current);
       setOffline(null);
@@ -200,6 +211,9 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
   const running = job?.status === "running";
   const readyProviders = providerKeys.filter((row) => row.ready).map((row) => row.provider);
   const judgeStages = JUDGED_STAGES.filter((stage) => (lastRun?.request.stages as string[] | undefined)?.includes(stage));
+  /** Every release the last run used (the dataset and/or uploads): judged and scored together. */
+  const runReleases = (lastRun?.request.releases as string[] | undefined) ?? [];
+  const uploadName = (release: string | undefined) => uploads.find((item) => item.release === release)?.name ?? release;
 
   function update(change: Partial<EvalDraft>) {
     setDraft((current) => ({ ...current, ...change }));
@@ -216,7 +230,9 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
       lite: draft.lite,
       categories: draft.categories.length === categories.length ? [] : draft.categories,
       weights: weightsToBackend(draft.weights),
-      safety_sample: draft.stages.includes("safety") ? draft.safetySample : null,
+      safety_sample: usesDataset(draft) && draft.stages.includes("safety") ? draft.safetySample : null,
+      dataset: usesDataset(draft),
+      uploads: usesUploads(draft) ? draft.uploads : [],
     };
   }
 
@@ -246,11 +262,11 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
       setJudgePlan(null);
     });
 
-  const sizesNow = stageSizes(draft, sizes);
+  const sizesNow = stageSizes(draft, sizes, uploads);
   const totalCalls = Object.values(sizesNow).reduce((total, size) => total + (size?.calls ?? 0), 0);
   const judges = chosenJudges(draft);
   const paidJudges = judges.filter((name) => !name.startsWith("demo/"));
-  const judgeBody = () => ({ stages: judgeStages, judges });
+  const judgeBody = () => ({ stages: judgeStages, judges, releases: runReleases });
 
   const checkJudges = () => act("Checking judges", async () => setJudgePlan(await backend.planJudge(judgeBody())));
 
@@ -260,7 +276,7 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
       setJudgePlan(null);
     });
 
-  const startScore = () => act("Scoring", async () => setJob(await backend.startScore()));
+  const startScore = () => act("Scoring", async () => setJob(await backend.startScore(runReleases)));
 
   return (
     <div className="mx-auto min-w-0 max-w-7xl px-6 py-8">
@@ -398,8 +414,55 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
         <section className="mt-6 space-y-6">
           <div className={card}>
             <h2 className="text-lg font-semibold text-ink">Dataset</h2>
-            <p className="mt-1 text-sm text-muted">Choose the tests, how much of the data, and the protected classes.</p>
+            <p className="mt-1 text-sm text-muted">Choose what to run. Its options appear below.</p>
+            <fieldset className="mt-4">
+              <legend className="sr-only">What to run</legend>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {DATA_SOURCES.map((option) => (
+                  <label
+                    key={option.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm ${
+                      draft.source === option.id ? "border-ink/40 bg-[#f7f9fc]" : "border-line"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="data-source"
+                      className="mt-0.5 h-4 w-4 accent-ink"
+                      checked={draft.source === option.id}
+                      onChange={() => update({ source: option.id })}
+                    />
+                    <span>
+                      <span className="font-medium text-ink">{option.title}</span>
+                      <span className="mt-0.5 block text-muted">{option.text}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
 
+          {usesUploads(draft) ? (
+            <PromptUpload
+              readOnly={readOnly}
+              format={uploadFormat}
+              saved={uploads}
+              selected={draft.uploads}
+              selectable
+              onToggle={(release) => update({ uploads: toggle(draft.uploads, release) })}
+              onSaved={(saved) => {
+                setUploads((list) => [saved, ...list.filter((item) => item.release !== saved.release)]);
+                setDraft((current) => ({
+                  ...current,
+                  uploads: current.uploads.includes(saved.release) ? current.uploads : [...current.uploads, saved.release],
+                }));
+              }}
+            />
+          ) : null}
+
+          {draft.source ? (
+          <div className={card}>
+            <h2 className="text-lg font-semibold text-ink">Tests and size</h2>
             <fieldset className="mt-5">
               <legend className="text-sm font-semibold text-ink">1. Tests</legend>
               <div className="mt-2 space-y-2">
@@ -428,7 +491,7 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                           <span className="mt-0.5 block text-muted">{stage.about}</span>
                         </span>
                       </label>
-                      {stage.id === "safety" && chosen ? (
+                      {stage.id === "safety" && chosen && usesDataset(draft) ? (
                         <div className="ml-7 mt-3 border-t border-line pt-3">
                           <label className="flex flex-wrap items-center gap-2 text-sm text-ink">
                             <input
@@ -467,13 +530,17 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                 {[
                   {
                     lite: true,
-                    title: "Lite: a quarter",
-                    text: `1 of the 4 name pairs per template, and ${sizes ? formatCount(sizes.safety.lite) : "a quarter of the"} safety prompts (every kind kept). For trying models and comparing them at lower cost.`,
+                    title: "Lite",
+                    text: "Cheaper. For trying and comparing models.",
+                    dataset: `1 of the 4 name pairs per template; ${sizes ? formatCount(sizes.safety.lite) : "a quarter of the"} safety prompts.`,
+                    uploads: "the first name pair per scenario; every safety prompt.",
                   },
                   {
                     lite: false,
-                    title: "Full: everything",
-                    text: `All 4 name pairs per template and all ${sizes ? formatCount(sizes.safety.full) : ""} safety prompts. For the results you report.`,
+                    title: "Full",
+                    text: "For the results you report.",
+                    dataset: `every name pair; all ${sizes ? formatCount(sizes.safety.full) : ""} safety prompts.`,
+                    uploads: "every name pair; every safety prompt.",
                   },
                 ].map((option) => (
                   <label
@@ -491,21 +558,30 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                     />
                     <span>
                       <span className="font-medium text-ink">{option.title}</span>
-                      <span className="mt-0.5 block text-muted">{option.text}</span>
+                      <span className="text-muted"> · {option.text}</span>
+                      {usesDataset(draft) ? (
+                        <span className="mt-1 block text-muted">
+                          <span className="text-ink">Our dataset:</span> {option.dataset}
+                        </span>
+                      ) : null}
+                      {usesUploads(draft) ? (
+                        <span className="mt-1 block text-muted">
+                          <span className="text-ink">Your prompts:</span> {option.uploads}
+                        </span>
+                      ) : null}
                     </span>
                   </label>
                 ))}
               </div>
-              <p className="mt-2 text-sm text-muted">
-                Pushback is always its fixed set of conversations. In the scores, a full run always counts over a lite
-                one.
-              </p>
+              <p className="mt-2 text-sm text-muted">Pushback always runs its fixed set of conversations.</p>
             </fieldset>
 
+            {usesDataset(draft) ? (
             <fieldset className="mt-6">
               <legend className="text-sm font-semibold text-ink">3. Protected classes</legend>
               <p className="mt-1 text-sm text-muted">
                 For multiple choice, stories and pushback. Safety prompts are not split by class.
+                {usesUploads(draft) ? " Applies to our dataset; your uploads always run all their classes." : ""}
               </p>
               <div className="mt-2 flex items-center gap-2">
                 <button
@@ -544,6 +620,7 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                 <p className="mt-2 text-sm text-muted">The class list comes from the backend&apos;s dataset release.</p>
               )}
             </fieldset>
+            ) : null}
 
             {Object.keys(sizesNow).length ? (
               <p className="mt-6 rounded-xl bg-[#f7f9fc] px-4 py-3 text-sm text-ink" data-testid="size-total">
@@ -553,40 +630,7 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
               </p>
             ) : null}
           </div>
-
-          <div className={card}>
-            <h2 className="text-lg font-semibold text-ink">Do not include personal or confidential data in your prompts.</h2>
-            <p className="mt-2 text-sm text-muted">
-              Prompts are sent to the model provider you choose, may be kept in their logs, and are stored in this
-              tool&apos;s results and exports. Before uploading, remove names, addresses, phone numbers, email
-              addresses, dates of birth, government ID numbers, health or financial information about real people, and
-              anything marked confidential.
-            </p>
-            <label className="mt-4 flex items-start gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 accent-ink"
-                checked={uploadConfirmed}
-                onChange={(event) => setUploadConfirmed(event.target.checked)}
-              />
-              I confirm these prompts contain no personal or confidential data.
-            </label>
-            <label className="mt-4 block text-sm font-medium text-ink" htmlFor="prompt-upload">
-              Upload prompts (CSV or JSONL)
-            </label>
-            <input
-              id="prompt-upload"
-              type="file"
-              accept=".csv,.jsonl,text/csv,application/jsonl"
-              disabled={!uploadConfirmed}
-              onChange={(event) => setUploadName(event.target.files?.[0]?.name ?? null)}
-              className="mt-2 block text-sm text-ink file:mr-3 file:rounded-lg file:border file:border-line file:bg-white file:px-3 file:py-2 file:text-sm disabled:opacity-50"
-            />
-            <p className="mt-2 text-sm text-muted">
-              {uploadName ? `Selected ${uploadName}. ` : ""}
-              Running uploaded prompts depends on the link-prompts feature, which is not built yet.
-            </p>
-          </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -646,15 +690,30 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
           <div className={card}>
             <h2 className="text-lg font-semibold text-ink">Weights</h2>
             <p className="mt-1 text-sm text-muted">
-              Moving one scale changes the others so the four weights still sum to 100%. The weights are saved with the
-              run; the scores still use the evaluation team&apos;s weights in the backend&apos;s config/scoring.yaml.
+              How much each test counts in this run&apos;s overall score. Moving a slider changes the others so the total
+              stays 100%; typing a number changes only that test, so the total must come to 100% before you start. The
+              weights are saved with the run, and the Scores page lists the weights each overall score used.
             </p>
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {TESTS.map((test) => (
-                <label key={test} className="block" htmlFor={`eval-weight-${test}`}>
+                <div key={test}>
                   <span className="flex items-center justify-between gap-2 text-sm font-medium text-ink">
-                    <span>{TEST_LABELS[test]}</span>
-                    <span className="tabular-nums">{draft.weights[test]}%</span>
+                    <label htmlFor={`eval-weight-${test}`}>{TEST_LABELS[test]}</label>
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        aria-label={`${TEST_LABELS[test]} weight in percent`}
+                        value={draft.weights[test]}
+                        onChange={(event) =>
+                          update({ weights: setEvalWeight(draft.weights, test as TestName, Number(event.target.value)) })
+                        }
+                        className="w-16 rounded-lg border border-line bg-white px-2 py-1 text-right text-sm tabular-nums text-ink"
+                      />
+                      %
+                    </span>
                   </span>
                   <input
                     id={`eval-weight-${test}`}
@@ -668,21 +727,37 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                     }
                     className="mt-2 w-full accent-ink"
                   />
-                </label>
+                </div>
               ))}
             </div>
-            <p className="mt-3 text-sm font-medium text-ink">
-              Total {TESTS.reduce((sum, test) => sum + draft.weights[test], 0)}%
-            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <p
+                className={`text-sm font-medium ${
+                  TESTS.reduce((sum, test) => sum + draft.weights[test], 0) === 100 ? "text-ink" : "text-[#9b2c2c]"
+                }`}
+                data-testid="weight-total"
+              >
+                Total {TESTS.reduce((sum, test) => sum + draft.weights[test], 0)}%
+              </p>
+              <button
+                type="button"
+                className="rounded-lg px-2 py-1 text-sm font-medium text-ink underline underline-offset-4"
+                onClick={() => update({ weights: DEFAULT_EVAL_WEIGHTS })}
+              >
+                Reset to 25% each
+              </button>
+            </div>
           </div>
 
           <div className={card}>
             <h2 className="text-lg font-semibold text-ink">Confirm</h2>
             <p className="mt-1 text-sm text-ink">
-              {draft.model.trim() || "No model"} · {draft.lite ? "lite (a quarter of the data)" : "full data"} ·{" "}
-              {draft.categories.length} of{" "}
-              {categories.length} classes
-              {draft.stages.includes("safety") && draft.safetySample !== null ? ` · safety test sample of ${draft.safetySample}` : ""}
+              {draft.model.trim() || "No model"} · {draft.lite ? "lite (a quarter of the data)" : "full data"}
+              {usesDataset(draft) ? ` · dataset: ${draft.categories.length} of ${categories.length} classes` : ""}
+              {usesDataset(draft) && draft.stages.includes("safety") && draft.safetySample !== null
+                ? ` · safety test sample of ${draft.safetySample}`
+                : ""}
+              {usesUploads(draft) && draft.uploads.length ? ` · uploads: ${draft.uploads.map(uploadName).join(", ")}` : ""}
             </p>
             <ProblemList problems={blocking} />
             <div className="mt-4 flex flex-wrap gap-2">
@@ -724,7 +799,14 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                   <tbody className="tabular-nums text-ink">
                     {Object.entries(plan.stages).map(([stage, value]) => (
                       <tr key={stage} className="border-t border-line">
-                        <td className="py-1">{STAGES.find((item) => item.id === stage)?.label ?? stage}</td>
+                        <td className="py-1">
+                          {STAGES.find((item) => item.id === (value.stage ?? stage))?.label ?? stage}
+                          {value.upload ? (
+                            <span className="ml-2 rounded-full bg-[#eef2f8] px-2 py-0.5 text-xs text-ink">
+                              upload: {uploadName(value.release)}
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="py-1">{formatCount(value.items)}</td>
                         <td className="py-1">{formatCount(value.calls)}</td>
                         <td className="py-1">{formatCount(value.input_tokens)}</td>
@@ -764,7 +846,8 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                 {judgeStages.length ? (
                   <>
                     <p className="mt-1 text-sm text-muted">
-                      1. Judges label the {judgeStages.join(", ")} replies (paid calls, unless the judges are demo/…).
+                      1. Judges label the {judgeStages.join(", ")} replies (paid calls, unless the judges are demo/…)
+                      {runReleases.length > 1 ? `, for the dataset and each upload` : ""}.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button type="button" className={secondary} disabled={busy !== null || judges.length === 0} onClick={checkJudges}>
@@ -801,7 +884,12 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                 ) : (
                   <p className="mt-1 text-sm text-muted">Multiple choice needs no judge.</p>
                 )}
-                <p className="mt-3 text-sm text-muted">{judgeStages.length ? "2" : "1"}. Score the results (free).</p>
+                <p className="mt-3 text-sm text-muted">
+                  {judgeStages.length ? "2" : "1"}. Score the results (free).
+                  {runReleases.some((release) => release.startsWith("upload-"))
+                    ? " Uploads are scored on their own; pick them at the top of the Scores page."
+                    : ""}
+                </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <button type="button" className={secondary} disabled={busy !== null} onClick={startScore}>
                     Score

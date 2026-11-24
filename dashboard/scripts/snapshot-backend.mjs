@@ -4,7 +4,7 @@
 import fs from "node:fs";
 
 const base = (process.env.RAIEVAL_API_URL ?? "http://127.0.0.1:8765").replace(/\/$/, "");
-const PATHS = ["status", "categories", "sizes", "keys", "judges", "models", "weights"];
+const PATHS = ["status", "categories", "sizes", "keys", "judges", "models", "weights", "uploads", "uploads/format"];
 
 const snapshot = { saved_at: new Date().toISOString() };
 for (const path of PATHS) {
@@ -15,6 +15,8 @@ for (const path of PATHS) {
 // the backend's own file path and any running job mean nothing on another machine
 delete snapshot.status.db;
 snapshot.status.active_job = null;
+// uploaded sets can't be run on a read-only site; their names and counts are not shown there either
+snapshot.uploads = [];
 
 fs.mkdirSync("data", { recursive: true });
 fs.writeFileSync("data/backend-snapshot.json", JSON.stringify(snapshot, null, 2) + "\n");

@@ -51,8 +51,28 @@ export const TEST_LABELS: Record<TestName, string> = {
   Pushback: "Pushback",
 };
 
+/** What a run covers: the evaluation dataset, the user's saved uploads, or both (scored apart). */
+export type DataSource = "dataset" | "uploads" | "both";
+
+export const DATA_SOURCES: Array<{ id: DataSource; title: string; text: string }> = [
+  { id: "dataset", title: "Our dataset", text: "The evaluation dataset: protected-class scenarios and WildGuardTest safety prompts." },
+  { id: "uploads", title: "Your uploaded prompts", text: "Only prompt sets you upload, in our format." },
+  {
+    id: "both",
+    title: "Both",
+    text: "The dataset and your uploads in one run. Each is scored and shown on its own, never mixed.",
+  },
+];
+
+export const usesDataset = (draft: EvalDraft) => draft.source === "dataset" || draft.source === "both";
+export const usesUploads = (draft: EvalDraft) => draft.source === "uploads" || draft.source === "both";
+
 export type EvalDraft = {
   model: string;
+  /** null until the user chooses on the Dataset step. */
+  source: DataSource | null;
+  /** Saved uploads to run (their release ids, upload-<name>). */
+  uploads: string[];
   stages: StageId[];
   lite: boolean;
   categories: string[];
@@ -121,6 +141,12 @@ export function rebalanceEvalWeights(current: EvalWeights, key: TestName, nextVa
   return next;
 }
 
+/** A weight typed as a number: whole percent from 0 to 100; the others are left as they are. */
+export function setEvalWeight(current: EvalWeights, key: TestName, value: number): EvalWeights {
+  const clean = Number.isFinite(value) ? Math.round(Math.min(100, Math.max(0, value))) : 0;
+  return { ...current, [key]: clean };
+}
+
 export function weightProblems(weights: EvalWeights): string[] {
   if (TESTS.some((test) => weights[test] < 0)) return ["Weights cannot be negative."];
   const total = TESTS.reduce((sum, test) => sum + weights[test], 0);
@@ -131,9 +157,11 @@ export function weightProblems(weights: EvalWeights): string[] {
 /** Problems the form can see before asking the backend. */
 export function formProblems(draft: EvalDraft): string[] {
   const out: string[] = [];
+  if (!draft.source) out.push("Choose what to run on the Dataset step.");
   if (draft.stages.length === 0) out.push("Pick at least one stage.");
-  const needsClasses = draft.stages.some((stage) => stage !== "safety");
+  const needsClasses = usesDataset(draft) && draft.stages.some((stage) => stage !== "safety");
   if (needsClasses && draft.categories.length === 0) out.push("Pick at least one protected class.");
+  if (usesUploads(draft) && draft.uploads.length === 0) out.push("Pick at least one uploaded prompt set, or run only the dataset.");
   if (!/^[\w.-]+\/\S+$/.test(draft.model.trim())) out.push("Model must look like provider/model, e.g. openai/gpt-4o-mini.");
   if (draft.stages.includes("safety") && draft.safetySample !== null && !(draft.safetySample >= 1)) {
     out.push("A safety test sample needs at least 1 prompt.");
@@ -144,28 +172,45 @@ export function formProblems(draft: EvalDraft): string[] {
 
 export type StageSize = { items: number; calls: number; unit: string };
 
-/** What each chosen stage sends, from the backend's item counts: the same numbers the check gives. */
-export function stageSizes(draft: EvalDraft, sizes: import("@/lib/backend").Sizes | null): Partial<Record<StageId, StageSize>> {
+/** What each chosen stage sends, from the backend's item counts: the same numbers the check gives.
+ * Chosen uploads add their own counts (their pushback number is an estimate; the check is exact). */
+export function stageSizes(
+  draft: EvalDraft,
+  sizes: import("@/lib/backend").Sizes | null,
+  uploads: import("@/lib/backend").SavedUpload[] = [],
+): Partial<Record<StageId, StageSize>> {
   if (!sizes) return {};
   const size = draft.lite ? "lite" : "full";
+  const chosen = usesUploads(draft) ? uploads.filter((item) => draft.uploads.includes(item.release)) : [];
+  const fromDataset = usesDataset(draft);
   const sum = (byClass: Record<string, { lite: number; full: number }>) =>
     draft.categories.reduce((total, id) => total + (byClass[id]?.[size] ?? 0), 0);
   const out: Partial<Record<StageId, StageSize>> = {};
+  const add = (stage: StageId, n: number, perItem: number, unit: string) => {
+    const before = out[stage] ?? { items: 0, calls: 0, unit };
+    out[stage] = { items: before.items + n, calls: before.calls + n * perItem, unit };
+  };
   for (const stage of draft.stages) {
     if (stage === "mcq") {
-      const n = sum(sizes.mcq);
-      out.mcq = { items: n, calls: n, unit: "questions" };
+      if (fromDataset) add("mcq", sum(sizes.mcq), 1, "questions");
+      for (const item of chosen) add("mcq", item.counts.mcq[size], 1, "questions");
     } else if (stage === "open") {
-      const n = sum(sizes.open);
-      out.open = { items: n, calls: n, unit: "stories" };
+      if (fromDataset) add("open", sum(sizes.open), 1, "stories");
+      for (const item of chosen) add("open", item.counts.stories[size], 1, "stories");
     } else if (stage === "safety") {
-      const n = draft.safetySample ?? sizes.safety[size];
-      out.safety = { items: Math.min(n, sizes.safety.full), calls: Math.min(n, sizes.safety.full), unit: "prompts" };
+      if (fromDataset) add("safety", Math.min(draft.safetySample ?? sizes.safety[size], sizes.safety.full), 1, "prompts");
+      for (const item of chosen) add("safety", item.counts.safety.total, 1, "prompts");
     } else {
-      const n = sizes.pushback.per_class * draft.categories.length + sizes.pushback.safety;
-      out.pushback = { items: n, calls: n * sizes.pushback.turns, unit: "conversations" };
+      if (fromDataset) {
+        add("pushback", sizes.pushback.per_class * draft.categories.length + sizes.pushback.safety, sizes.pushback.turns, "conversations");
+      }
+      for (const item of chosen) {
+        const n = sizes.pushback.per_class * item.counts.classes.length + Math.min(item.counts.safety.harmful, sizes.pushback.safety);
+        add("pushback", n, sizes.pushback.turns, "conversations");
+      }
     }
   }
+  for (const stage of draft.stages) if (out[stage]?.items === 0) delete out[stage];
   return out;
 }
 
