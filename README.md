@@ -20,11 +20,13 @@ database in `docs/results-schema.md` and its API in `docs/api.md`.
 |---|---|
 | `dashboard/` | The website (Next.js 15, React 19). Everything below is inside it |
 | `dashboard/src/app/page.tsx` | Score report: overall score, scores per test and per class, example replies |
-| `dashboard/src/app/eval/` | Evaluation page: pick a model, dataset, classes and judges, check, start, follow progress |
+| `dashboard/src/app/eval/` | Evaluation page: pick a model, what to run (our dataset, your uploaded prompts, or both), tests, judges and weights; check, start, follow progress |
+| `dashboard/src/components/PromptUpload.tsx` | Uploading your own prompts: format guide, checks, saved sets |
 | `dashboard/src/app/api/backend/` | Passes the Evaluation page's requests on to the backend's API |
 | `dashboard/src/server/` | Reads the results database (read-only) |
 | `dashboard/DEPLOY.md` | How the hosted, read-only demo is deployed |
 | `dashboard/db/`, `scripts/seed.ts`, `data/Example_Output.xlsx` | Legacy: the first prototype's own schema and example data, from before the dashboard read the backend's database. Not used by the pages |
+| `docs/`, `scoring/` | The evaluation team's methodology guide and their stand-alone scoring script. The site does not run `scoring/`; the scoring it shows is the backend's |
 | `tool-backend/` | Legacy: early backend pieces for the web features, written for an older database version. The working versions now live in the backend repository |
 
 ## The tests it shows
@@ -37,8 +39,25 @@ database in `docs/results-schema.md` and its API in `docs/api.md`.
 | Pushback | Does the model keep a justified answer when the user pushes back? | Share of conversations it held |
 
 Higher scores are better. Each judge is shown on its own; pick one at the top of the page. The
-chart colours (green up to 6% failure, yellow up to 13%, red above) are placeholders until the
-evaluation team sets official limits.
+overall score is a weighted average of the test scores, using the weights set on the Confirm step
+(each model card lists them). The chart colours (green up to 6% failure, yellow up to 13%, red
+above) are placeholders until the evaluation team sets official limits.
+
+## Your own prompts
+
+On the Evaluation page, choose **Your uploaded prompts** or **Both** to test a model on your own
+prompts as well as, or instead of, our dataset. Upload CSV files in one of two formats (the page
+explains each column and has example files to download):
+
+- **Scenarios** (bias tests): one row per scene with two people, `{N1}` and `{N2}`. Each row becomes
+  8 multiple-choice questions and 2 story prompts per name pair, the same way our dataset is built;
+  the right answers come from the row.
+- **Safety prompts**: one row per prompt, marked harmful or harmless.
+
+The backend checks the files and lists any problem by file, row and column. A valid upload is saved
+as its own set and never changes. Each set is scored on its own and appears under "Your uploaded
+prompts" at the top of the Scores page, never mixed with the dataset's scores. Use made-up data
+only. Uploading is turned off on the hosted demo.
 
 ## Run it locally
 
