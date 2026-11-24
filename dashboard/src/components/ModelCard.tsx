@@ -37,6 +37,14 @@ export function ModelCard({ summary }: ModelCardProps) {
         Overall score · higher is better
         {summary.compositeIncludes.length ? ` · combines ${summary.compositeIncludes.join(", ")}` : ""}
       </p>
+      {summary.weights.length ? (
+        <p className="mt-1 text-xs text-muted" data-testid="weights-used">
+          Weights:{" "}
+          {summary.weights
+            .map((item) => `${item.test} ${Math.round(item.weight * 1000) / 10}%`)
+            .join(" · ")}
+        </p>
+      ) : null}
       <dl className="mt-5 space-y-2 text-sm">
         {COMPONENTS.map((component) => (
           <div key={component.score} className="flex items-center justify-between gap-3">
@@ -65,12 +73,11 @@ export function ModelCard({ summary }: ModelCardProps) {
       </dl>
       {summary.subsets.some((item) => item.kind === "lite") ? (
         <p className="mt-4 text-sm text-muted">
-          Lite:{" "}
-          {COMPONENTS.map((component) => component.label)
-            .filter((test) => summary.subsets.some((item) => item.kind === "lite" && item.test === test))
-            .join(", ")}{" "}
-          used a
-          quarter of the data. Run full for the results you report.
+          {summary.subsets
+            .filter((item) => item.kind === "lite")
+            .map((item) => `${item.test}: ${item.note.replace(/^lite: /, "")}`)
+            .join("; ")}
+          . Lite runs use part of the data; run full for the results you report.
         </p>
       ) : null}
       {summary.subsets

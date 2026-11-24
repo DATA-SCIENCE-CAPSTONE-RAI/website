@@ -3,6 +3,18 @@
 export type TestName = "BBQ" | "BBG" | "Safety" | "Pushback";
 
 /** One release scored with one judge: what the dashboard shows at a time. */
+/** Users' uploaded prompt sets are releases named upload-<name> (backend upload.py). */
+export const UPLOAD_PREFIX = "upload-";
+
+export function isUploadRelease(release: string): boolean {
+  return release.startsWith(UPLOAD_PREFIX);
+}
+
+/** "upload-benefits-office" -> "benefits office"; other releases keep their name. */
+export function releaseLabel(release: string): string {
+  return isUploadRelease(release) ? release.slice(UPLOAD_PREFIX.length).replace(/-/g, " ") : release;
+}
+
 export type ScoreView = {
   release: string;
   judge: string;

@@ -6,7 +6,17 @@ import path from "node:path";
  * served by the /api/backend proxy when READ_ONLY=1, so the Evaluation page can be explored with no
  * backend. Only these GET paths are answered; everything else (checks, runs, jobs) is refused.
  */
-export const SNAPSHOT_PATHS = ["status", "categories", "sizes", "keys", "judges", "models", "weights"] as const;
+export const SNAPSHOT_PATHS = [
+  "status",
+  "categories",
+  "sizes",
+  "keys",
+  "judges",
+  "models",
+  "weights",
+  "uploads",
+  "uploads/format",
+] as const;
 
 export function snapshotFile(): string {
   return path.join(process.cwd(), "data", "backend-snapshot.json");

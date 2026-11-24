@@ -9,7 +9,7 @@ import { ScoreGauge } from "@/components/ScoreGauge";
 import { promptsForAxis, type BenchmarkName } from "@/lib/examples";
 import { downloadRunPdf } from "@/lib/pdf";
 import { reportChartRows, type ModelSummary } from "@/lib/score";
-import type { Agreement, Reply, ScoreView } from "@/lib/types";
+import { isUploadRelease, releaseLabel, type Agreement, type Reply, type ScoreView } from "@/lib/types";
 
 type DashboardProps = {
   view: ScoreView;
@@ -79,7 +79,7 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm text-muted" htmlFor="view-select">
-            Release · judge
+            Prompts · judge
           </label>
           <select
             id="view-select"
@@ -90,11 +90,20 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
               router.push(`/?release=${encodeURIComponent(release)}&judge=${encodeURIComponent(judge)}`);
             }}
           >
-            {views.map((item) => (
-              <option key={viewKey(item)} value={viewKey(item)}>
-                {item.release} · {item.judge}
-              </option>
-            ))}
+            {[
+              { label: "Evaluation dataset", items: views.filter((item) => !isUploadRelease(item.release)) },
+              { label: "Your uploaded prompts", items: views.filter((item) => isUploadRelease(item.release)) },
+            ]
+              .filter((group) => group.items.length)
+              .map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.items.map((item) => (
+                    <option key={viewKey(item)} value={viewKey(item)}>
+                      {releaseLabel(item.release)} · {item.judge}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
           </select>
           <button
             type="button"
@@ -123,10 +132,21 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
         </div>
       </header>
       {exportError ? <p className="mt-3 text-sm text-[#083E73]">{exportError}</p> : null}
+      {isUploadRelease(view.release) ? (
+        <section className="mt-6 rounded-2xl border border-[#c5d9f0] bg-[#f3f8fd] p-5 text-sm text-ink" data-testid="upload-banner">
+          <p className="font-medium">Your uploaded prompts: {releaseLabel(view.release)}</p>
+          <p className="mt-1 text-muted">
+            These scores are for an uploaded prompt set, scored on its own and never mixed with the evaluation dataset.
+            Compare models on the same set only; scores on different sets are not comparable.
+          </p>
+        </section>
+      ) : null}
 
       <div id="run-report" className="mt-8 min-w-0 space-y-6 bg-canvas">
         <div>
-          <h2 className="text-lg font-semibold text-ink">Release {view.release}</h2>
+          <h2 className="text-lg font-semibold text-ink">
+            {isUploadRelease(view.release) ? `Uploaded prompts: ${releaseLabel(view.release)}` : `Release ${view.release}`}
+          </h2>
           <p className="mt-1 text-sm text-muted">
             Judge {view.judge} · Scored {view.scoredAt.slice(0, 16).replace("T", " ")} · Rules{" "}
             {view.methodVersion ?? "—"} · {view.models} {view.models === 1 ? "model" : "models"}
