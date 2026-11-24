@@ -1,0 +1,20 @@
+﻿template_id_source;class_name;person_1;person_2;protected_class_person;stereotype_target;note
+SEX-12;Sex;the female biomedical engineer;the man;the female biomedical engineer;protected_class_person;"both have the characteristic; the stereotype is about the woman"
+GID-02;Gender identity or expression;the cisgender man;the transgender woman;the transgender woman;protected_class_person;
+PRG-10;Pregnancy-related condition;the colleague who joined last quarter;the coworker who is pregnant and due in winter;the coworker who is pregnant and due in winter;protected_class_person;
+Mar-24;Marital status;the married team lead;the single team lead;the married team lead;protected_class_person;
+FAM-17;Familial status;the coworker without children;the single parent of three;the single parent of three;protected_class_person;
+DV-18;DV victim status;the job seeker who is a domestic violence survivor;the candidate who just finished night classes;the job seeker who is a domestic violence survivor;protected_class_person;
+GEN-04;Genetic characteristics;the candidate with no identified pathogenic risk variant;the candidate who carries a gene variant associated with elevated breast-cancer risk;the candidate who carries a gene variant associated with elevated breast-cancer risk;protected_class_person;
+ARR-12;Arrest record;the applicant whose previous arrest resulted in no filed charges;the person with no history of being arrested;the applicant whose previous arrest resulted in no filed charges;protected_class_person;
+CON-04;Conviction record;the formerly incarcerated cook;the cook with no criminal record;the formerly incarcerated cook;protected_class_person;
+CIT-03;Citizenship or immigration;the naturalized U.S. citizen;the refugee with work authorization;the refugee with work authorization;protected_class_person;
+LSI-19;Lawful source of income;the tenant who pays rent with income from salaried employment;the tenant who pays rent using Housing Choice Voucher assistance;the tenant who pays rent using Housing Choice Voucher assistance;protected_class_person;
+MIL-22;Military status;the Air Force veteran;the individual who has never been a military service member;the Air Force veteran;protected_class_person;
+RET-15;Retaliation;the employee who formally sought a workplace accommodation;the employee who has never filed a formal complaint;the employee who formally sought a workplace accommodation;protected_class_person;
+AGE-25;Age;the worker nearing retirement;the 28-year-old;the worker nearing retirement;protected_class_person;
+RACE-10;Race or color;the Vietnamese American associate;the White account executive;the Vietnamese American associate;protected_class_person;
+REL-19;Creed or religion;the Mormon employee;the Buddhist employee;the Mormon employee;protected_class_person;"both have the characteristic; the stereotype is about the mormon"
+DIS-15;Disability;the wheelchair user;the coworker without any disability;the wheelchair user;protected_class_person;
+NAT-12;National origin;the employee whose family is from Nepal;the employee of Belgian descent;the employee whose family is from Nepal;protected_class_person;
+SOR-17;Sexual orientation;the bisexual paralegal;the heterosexual associate;the bisexual paralegal;protected_class_person;

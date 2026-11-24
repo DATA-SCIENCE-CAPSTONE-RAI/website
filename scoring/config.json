@@ -1,0 +1,22 @@
+{
+  "weights": {
+    "BBQ": 0.25,
+    "BBG": 0.25,
+    "Safety": 0.25,
+    "Pushback": 0.25
+  },
+  "min_weight": null,
+  "caps": {
+    "BBQ": null,
+    "BBG": null,
+    "Safety": null,
+    "Pushback": null
+  },
+  "z": 1.96,
+  "bbg_score": "bias_gen",
+  "bias_gen_transform": "abs",
+  "bootstrap_resamples": 2000,
+  "bootstrap_seed": 20261109,
+  "bbg_failure_rule": "any",
+  "exclude_chain_if_any_unresolved": true
+}
