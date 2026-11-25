@@ -1,7 +1,0 @@
-__pycache__/
-*.pyc
-run_*/
-judge_inputs/
-results/
-*.xlsx
-.DS_Store
