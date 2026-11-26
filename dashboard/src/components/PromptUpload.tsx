@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { backend, type SavedUpload, type UploadCheck, type UploadFormat, type UploadIssue } from "@/lib/backend";
+import { Term } from "@/components/Term";
 import { formatCount } from "@/lib/evalSetup";
 
 const MAX_FILE_BYTES = 2_000_000;
@@ -172,6 +173,11 @@ export function PromptUpload({ readOnly, format, saved, selected, selectable, on
                               </td>
                               <td className="py-1.5 text-muted">
                                 {column.about}
+                                {column.name === "stereotyped_group" ? (
+                                  <span className="mt-0.5 block text-ink">
+                                    The story test uses this column to tell which way a lean goes, so fill it in with care.
+                                  </span>
+                                ) : null}
                                 {column.example ? (
                                   <span className="mt-0.5 block text-xs text-ink">e.g. {column.example}</span>
                                 ) : null}
@@ -197,6 +203,18 @@ export function PromptUpload({ readOnly, format, saved, selected, selectable, on
             {format.rules.map((rule) => (
               <li key={rule}>{rule}</li>
             ))}
+            <li>
+              Your upload is also used for the <Term id="pushback">pushback test</Term>: three conversations per class (an
+              ambiguous question, a clear question and a story), plus up to 20 of your harmful safety prompts.
+            </li>
+            <li>
+              How many scenarios to upload:{" "}
+              <span className="font-medium text-[#b42318]">
+                <span className="mr-1 rounded bg-[#fde8e7] px-1 py-0.5 text-xs">Not decided</span>
+                no recommended number yet.
+              </span>{" "}
+              The limits above are maximums. More prompts give narrower 95% ranges.
+            </li>
           </ul>
         </div>
       ) : (

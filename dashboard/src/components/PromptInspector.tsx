@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Term } from "@/components/Term";
 import type { BenchmarkName, PromptCard } from "@/lib/examples";
 
 type ProbeTab = "failed" | "passed";
@@ -30,7 +31,7 @@ function ScoreList({ card }: { card: PromptCard }) {
                   : "rounded bg-[#D6E6F5] px-1.5 py-0.5 underline decoration-[#0B5CAB] decoration-2 underline-offset-2"
               }
             >
-              {score.label}
+              {score.label === "Why" ? <Term id="why">Why</Term> : score.label}
             </span>
             <span className="tabular-nums">{score.value}</span>
           </li>
@@ -105,7 +106,9 @@ export function PromptInspector({ model, benchmark, axis, flagged, reference, fl
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Probe review</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">
+            <Term id="probeReview">Probe review</Term>
+          </p>
           <h3 className="mt-1 text-lg font-semibold text-ink">Failed / passed</h3>
           <p className="mt-1 text-sm text-muted">
             {model} · {benchmark} · {axis}. Highlighted text is the evidence for that judgment.

@@ -17,6 +17,8 @@ import {
   type UploadFormat,
 } from "@/lib/backend";
 import { PromptUpload } from "@/components/PromptUpload";
+import { Term } from "@/components/Term";
+import type { TermId } from "@/lib/glossary";
 import {
   DATA_SOURCES,
   DEFAULT_EVAL_WEIGHTS,
@@ -118,6 +120,8 @@ function JobProgress({ job }: { job: Job }) {
 
 /** `readOnly`: a hosted demo (READ_ONLY=1) where every option can be explored, but nothing is
  * checked or run; the lists come from a saved snapshot, so key status does not apply. */
+const STAGE_TERM: Record<StageId, TermId> = { mcq: "bbq", open: "bbg", safety: "safety", pushback: "pushback" };
+
 export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<EvalDraft>(INITIAL);
@@ -339,12 +343,13 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
           <h2 className="text-lg font-semibold text-ink">Model</h2>
           {readOnly ? null : (
               <p className="mt-1 text-sm text-muted">
-                Use <span className="font-medium text-ink">{DEMO_MODEL}</span> to try a run with no API key and no cost (mock
+                Use <Term id="demoModel"><span className="font-medium text-ink">{DEMO_MODEL}</span></Term> to try a run with no API key and no cost (mock
                 answers that mean nothing).
               </p>
           )}
           <label className="mt-4 block text-sm font-medium text-ink" htmlFor="eval-model">
             Model
+            <Term id="model" />
           </label>
           <select
             id="eval-model"
@@ -433,7 +438,10 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                       onChange={() => update({ source: option.id })}
                     />
                     <span>
-                      <span className="font-medium text-ink">{option.title}</span>
+                      <span className="font-medium text-ink">
+                        {option.title}
+                        {option.id === "dataset" ? <Term id="ourDataset" /> : null}
+                      </span>
                       <span className="mt-0.5 block text-muted">{option.text}</span>
                     </span>
                   </label>
@@ -480,7 +488,10 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                         />
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-baseline justify-between gap-x-3">
-                            <span className="font-medium">{stage.label}</span>
+                            <span className="font-medium">
+                              {stage.label}
+                              <Term id={STAGE_TERM[stage.id]} />
+                            </span>
                             {size ? (
                               <span className="tabular-nums text-muted" data-testid={`size-${stage.id}`}>
                                 {formatCount(size.items)} {size.unit}
@@ -525,7 +536,10 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
             </fieldset>
 
             <fieldset className="mt-6">
-              <legend className="text-sm font-semibold text-ink">2. How much of the data</legend>
+              <legend className="text-sm font-semibold text-ink">
+                2. How much of the data
+                <Term id="howMuch" />
+              </legend>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {[
                   {
@@ -557,7 +571,10 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                       onChange={() => update({ lite: option.lite })}
                     />
                     <span>
-                      <span className="font-medium text-ink">{option.title}</span>
+                      <span className="font-medium text-ink">
+                        {option.title}
+                        {option.lite ? <Term id="liteChoice" /> : null}
+                      </span>
                       <span className="text-muted"> · {option.text}</span>
                       {usesDataset(draft) ? (
                         <span className="mt-1 block text-muted">
@@ -573,12 +590,17 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
                   </label>
                 ))}
               </div>
-              <p className="mt-2 text-sm text-muted">Pushback always runs its fixed set of conversations.</p>
+              <p className="mt-2 text-sm text-muted">
+                Pushback always runs its <Term id="pushbackSet">fixed set of conversations</Term>.
+              </p>
             </fieldset>
 
             {usesDataset(draft) ? (
             <fieldset className="mt-6">
-              <legend className="text-sm font-semibold text-ink">3. Protected classes</legend>
+              <legend className="text-sm font-semibold text-ink">
+                3. Protected classes
+                <Term id="protectedClass" />
+              </legend>
               <p className="mt-1 text-sm text-muted">
                 For multiple choice, stories and pushback. Safety prompts are not split by class.
                 {usesUploads(draft) ? " Applies to our dataset; your uploads always run all their classes." : ""}
@@ -643,7 +665,10 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
             agreement between judges is reported.{readOnly ? "" : " Demo judges are free mocks for trying the flow."}
           </p>
           <fieldset className="mt-4 space-y-2">
-            <legend className="text-sm font-medium text-ink">Judge models</legend>
+            <legend className="text-sm font-medium text-ink">
+              Judge models
+              <Term id="judgeFamilies" />
+            </legend>
             {(catalog?.judges ?? []).filter((item) => !(readOnly && item.demo)).map((item) => (
               <label key={item.id} className={`flex items-center gap-2 text-sm ${usable(item) ? "text-ink" : "text-muted"}`}>
                 <input
@@ -674,6 +699,12 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
           <p className="mt-2 text-sm text-muted">
             {judges.length ? `Chosen: ${judges.join(", ")}.` : "Pick at least one judge to label the replies."}
             {paidJudges.length ? " Real judges are billed to the backend's API keys." : ""}
+            {judges.length === 1 ? (
+              <>
+                {" "}
+                <Term id="oneJudge">With one judge, agreement can&apos;t be reported.</Term>
+              </>
+            ) : null}
           </p>
           {panel ? (
             <p className="mt-2 text-sm text-muted">
@@ -688,7 +719,10 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
       {step === 3 ? (
         <section className="mt-6 space-y-6">
           <div className={card}>
-            <h2 className="text-lg font-semibold text-ink">Weights</h2>
+            <h2 className="text-lg font-semibold text-ink">
+              Weights
+              <Term id="weightsChoice" />
+            </h2>
             <p className="mt-1 text-sm text-muted">
               How much each test counts in this run&apos;s overall score. Moving a slider changes the others so the total
               stays 100%; typing a number changes only that test, so the total must come to 100% before you start. The
@@ -746,6 +780,9 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
               >
                 Reset to 25% each
               </button>
+              <span className="text-sm text-muted">
+                <Term id="weightZero">A weight of 0</Term> · <Term id="comparingRuns">Comparing runs</Term>
+              </span>
             </div>
           </div>
 
@@ -769,6 +806,9 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
               >
                 {busy === "Checking" ? "Checking… (a few seconds)" : "Check and estimate"}
               </button>
+              <span className="self-center">
+                <Term id="estimate" />
+              </span>
               <button
                 type="button"
                 className={primary}
@@ -777,6 +817,9 @@ export function EvalWizard({ readOnly = false }: { readOnly?: boolean }) {
               >
                 {busy === "Starting" ? "Starting…" : "Start run"}
               </button>
+              <span className="self-center text-sm text-muted">
+                <Term id="cost">What it costs</Term>
+              </span>
             </div>
             {readOnly ? (
               <p className="mt-3 text-sm text-muted">Checking and running are turned off on this demo site.</p>

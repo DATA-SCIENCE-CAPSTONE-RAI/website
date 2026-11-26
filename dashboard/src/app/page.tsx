@@ -1,4 +1,5 @@
 import { Dashboard } from "@/components/Dashboard";
+import { DOCS_URL, GITHUB_URL } from "@/lib/glossary";
 import { summariesFromTables } from "@/lib/score";
 import { isUploadRelease } from "@/lib/types";
 import {
@@ -76,8 +77,8 @@ export default async function Home({
   }
 
   const summaries = summariesFromTables(getScoreSummary(view), getScoreByClass(view), getBiasGen(view));
-  const githubUrl = process.env.NEXT_PUBLIC_GITHUB_URL ?? "https://github.com";
-  const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.github.com";
+  const githubUrl = GITHUB_URL;
+  const docsUrl = DOCS_URL;
 
   return (
     <main>
