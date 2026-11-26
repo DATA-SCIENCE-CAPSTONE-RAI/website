@@ -6,6 +6,7 @@ import { BenchmarkChart } from "@/components/BenchmarkChart";
 import { ModelCard } from "@/components/ModelCard";
 import { PromptInspector } from "@/components/PromptInspector";
 import { ScoreGauge } from "@/components/ScoreGauge";
+import { Term } from "@/components/Term";
 import { promptsForAxis, type BenchmarkName } from "@/lib/examples";
 import { downloadRunPdf } from "@/lib/pdf";
 import { reportChartRows, type ModelSummary } from "@/lib/score";
@@ -79,7 +80,7 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm text-muted" htmlFor="view-select">
-            Prompts · judge
+            Prompts · <Term id="judge">judge</Term>
           </label>
           <select
             id="view-select"
@@ -145,10 +146,17 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
       <div id="run-report" className="mt-8 min-w-0 space-y-6 bg-canvas">
         <div>
           <h2 className="text-lg font-semibold text-ink">
-            {isUploadRelease(view.release) ? `Uploaded prompts: ${releaseLabel(view.release)}` : `Release ${view.release}`}
+            {isUploadRelease(view.release) ? (
+              `Uploaded prompts: ${releaseLabel(view.release)}`
+            ) : (
+              <>
+                <Term id="release">Release</Term> {view.release}
+              </>
+            )}
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Judge {view.judge} · Scored {view.scoredAt.slice(0, 16).replace("T", " ")} · Rules{" "}
+            <Term id="judge">Judge</Term> {view.judge} · Scored {view.scoredAt.slice(0, 16).replace("T", " ")} ·{" "}
+            <Term id="rules">Rules</Term>{" "}
             {view.methodVersion ?? "—"} · {view.models} {view.models === 1 ? "model" : "models"}
           </p>
           <p className="mt-1 text-sm text-muted">
@@ -199,7 +207,11 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
           <div className="min-w-0 lg:col-span-2">
             <BenchmarkChart
               title="BBQ"
-              caption="Failure rate by class (lower is better)"
+              caption={
+                <>
+                  <Term id="failureRate">Failure rate</Term> <Term id="byClass">by class</Term> (lower is better)
+                </>
+              }
               model={selectedModel}
               data={bbq}
               onOpen={(axis) => setOpenAxis({ benchmark: "BBQ", axis })}
@@ -207,14 +219,28 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
           </div>
           <BenchmarkChart
             title="BBG"
-            caption="|bias_gen| by class: how far stories lean either way (lower is better)"
+            caption={
+              <>
+                <Term id="absBiasGen">|bias_gen|</Term> <Term id="byClass">by class</Term>: how far stories lean either way
+                (lower is better)
+              </>
+            }
             model={selectedModel}
             data={bbg}
             onOpen={(axis) => setOpenAxis({ benchmark: "BBG", axis })}
           />
           <BenchmarkChart
             title="Safety (WildGuardTest)"
-            caption={safety.length ? "Failure rate: unsafe help or over-refusal (lower is better)" : "Not scored in this view"}
+            caption={
+              safety.length ? (
+                <>
+                  <Term id="failureRate">Failure rate</Term>: <Term id="unsafeHelp">unsafe help</Term> or{" "}
+                  <Term id="overRefusal">over-refusal</Term> (lower is better)
+                </>
+              ) : (
+                "Not scored in this view"
+              )
+            }
             model={selectedModel}
             data={safety}
             onOpen={(axis) => setOpenAxis({ benchmark: "Safety", axis })}
@@ -223,9 +249,14 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
             <BenchmarkChart
               title="Pushback"
               caption={
-                pushback.length
-                  ? "Failure rate by class: left a justified answer under pushback (lower is better)"
-                  : "Not scored in this view"
+                pushback.length ? (
+                  <>
+                    <Term id="failureRate">Failure rate</Term> <Term id="byClass">by class</Term>: left a{" "}
+                    <Term id="justified">justified answer</Term> under pushback (lower is better)
+                  </>
+                ) : (
+                  "Not scored in this view"
+                )
               }
               model={selectedModel}
               data={pushback}
@@ -236,7 +267,10 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
 
         {modelAgreement.length ? (
           <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
-            <h3 className="text-base font-semibold text-ink">Agreement with other judges</h3>
+            <h3 className="text-base font-semibold text-ink">
+              Agreement with other judges
+              <Term id="selfPreference" />
+            </h3>
             <p className="mt-1 text-sm text-muted">
               Cohen&apos;s kappa on each test&apos;s main label for {selectedModel}. Low agreement means the scores above
               depend on the judge.
@@ -246,7 +280,9 @@ export function Dashboard({ view, views, summaries, replies, agreement, githubUr
                 <tr>
                   <th className="py-1 font-medium">Test</th>
                   <th className="py-1 font-medium">Other judge</th>
-                  <th className="py-1 font-medium">Kappa</th>
+                  <th className="py-1 font-medium">
+                    <Term id="kappa">Kappa</Term>
+                  </th>
                   <th className="py-1 font-medium">Agreement</th>
                   <th className="py-1 font-medium">n</th>
                 </tr>

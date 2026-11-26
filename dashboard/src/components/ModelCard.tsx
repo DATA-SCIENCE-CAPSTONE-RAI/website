@@ -1,3 +1,5 @@
+import { Term } from "@/components/Term";
+import type { TermId } from "@/lib/glossary";
 import { formatScore, formatSigned, type ModelSummary } from "@/lib/score";
 
 const VERDICT_STYLE = {
@@ -12,11 +14,12 @@ const COMPONENTS: Array<{
   n: "bbqN" | "bbgN" | "wgN" | "syconN";
   label: string;
   chip: string;
+  term: TermId;
 }> = [
-  { score: "bbqScore", n: "bbqN", label: "BBQ", chip: "#D6E6F5" },
-  { score: "bbgScore", n: "bbgN", label: "BBG", chip: "#C5D9F0" },
-  { score: "wgScore", n: "wgN", label: "Safety", chip: "#E8F1FA" },
-  { score: "syconScore", n: "syconN", label: "Pushback", chip: "#B7D0EA" },
+  { score: "bbqScore", n: "bbqN", label: "BBQ", chip: "#D6E6F5", term: "bbq" },
+  { score: "bbgScore", n: "bbgN", label: "BBG", chip: "#C5D9F0", term: "bbg" },
+  { score: "wgScore", n: "wgN", label: "Safety", chip: "#E8F1FA", term: "safety" },
+  { score: "syconScore", n: "syconN", label: "Pushback", chip: "#B7D0EA", term: "pushback" },
 ];
 
 type ModelCardProps = {
@@ -30,16 +33,23 @@ export function ModelCard({ summary }: ModelCardProps) {
     <article className="h-full rounded-2xl border border-line bg-white p-5 text-left shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-lg font-semibold text-ink">{summary.model}</h3>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${verdict.className}`}>{verdict.label}</span>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${verdict.className}`}>
+          <Term id="verdict">{verdict.label}</Term>
+        </span>
       </div>
       <p className="mt-5 text-4xl font-semibold tracking-tight text-ink">{formatScore(summary.composite)}</p>
       <p className="mt-1 text-sm text-muted">
-        Overall score · higher is better
-        {summary.compositeIncludes.length ? ` · combines ${summary.compositeIncludes.join(", ")}` : ""}
+        <Term id="overall">Overall score</Term> · higher is better
+        {summary.compositeIncludes.length ? (
+          <>
+            {" · "}
+            <Term id="combines">combines</Term> {summary.compositeIncludes.join(", ")}
+          </>
+        ) : null}
       </p>
       {summary.weights.length ? (
         <p className="mt-1 text-xs text-muted" data-testid="weights-used">
-          Weights:{" "}
+          <Term id="weights">Weights</Term>:{" "}
           {summary.weights
             .map((item) => `${item.test} ${Math.round(item.weight * 1000) / 10}%`)
             .join(" · ")}
@@ -49,11 +59,16 @@ export function ModelCard({ summary }: ModelCardProps) {
         {COMPONENTS.map((component) => (
           <div key={component.score} className="flex items-center justify-between gap-3">
             <dt className="rounded px-1.5 py-0.5" style={{ backgroundColor: component.chip }}>
-              {component.label}
+              <Term id={component.term}>{component.label}</Term>
             </dt>
             <dd className="font-medium tabular-nums text-ink">
               {formatScore(summary[component.score])}
-              {summary[component.n] === null ? "" : ` · ${summary[component.n]}`}
+              {summary[component.n] === null ? null : (
+                <>
+                  {" · "}
+                  <Term id="n">{summary[component.n]}</Term>
+                </>
+              )}
               {(() => {
                 const subset = summary.subsets.find((item) => item.test === component.label);
                 return subset ? (
@@ -61,9 +76,10 @@ export function ModelCard({ summary }: ModelCardProps) {
                     className={`ml-2 rounded px-1.5 py-0.5 text-xs font-medium ${
                       subset.kind === "sample" ? "bg-[#fff0c2] text-[#6b4e00]" : "bg-[#e6edf5] text-[#3E5166]"
                     }`}
-                    title={subset.note}
                   >
-                    {subset.kind}
+                    <Term id={subset.kind === "sample" ? "sample" : "lite"} extra={`This result: ${subset.note}.`}>
+                      {subset.kind}
+                    </Term>
                   </span>
                 ) : null;
               })()}
@@ -89,11 +105,20 @@ export function ModelCard({ summary }: ModelCardProps) {
         ))}
       {summary.bbgBiasGen ? (
         <p className="mt-4 text-sm text-muted">
-          BBG bias_gen {formatSigned(summary.bbgBiasGen.value)}
-          {summary.bbgBiasGen.low !== null && summary.bbgBiasGen.high !== null
-            ? ` (95% CI ${formatSigned(summary.bbgBiasGen.low)} to ${formatSigned(summary.bbgBiasGen.high)})`
-            : ""}
-          {summary.bbgBiasGen.reading ? `: ${summary.bbgBiasGen.reading}` : ""}. Positive leans toward the stereotype.
+          BBG <Term id="biasGen">bias_gen</Term> {formatSigned(summary.bbgBiasGen.value)}
+          {summary.bbgBiasGen.low !== null && summary.bbgBiasGen.high !== null ? (
+            <>
+              {" ("}
+              <Term id="range">95% CI</Term> {formatSigned(summary.bbgBiasGen.low)} to {formatSigned(summary.bbgBiasGen.high)})
+            </>
+          ) : null}
+          {summary.bbgBiasGen.reading ? (
+            <>
+              {": "}
+              <Term id={/no detectable/i.test(summary.bbgBiasGen.reading) ? "noLean" : "lean"}>{summary.bbgBiasGen.reading}</Term>
+            </>
+          ) : null}
+          . Positive leans toward the stereotype.
         </p>
       ) : null}
     </article>

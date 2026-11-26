@@ -21,12 +21,14 @@ database in `docs/results-schema.md` and its API in `docs/api.md`.
 | `dashboard/` | The website (Next.js 15, React 19). Everything below is inside it |
 | `dashboard/src/app/page.tsx` | Score report: overall score, scores per test and per class, example replies |
 | `dashboard/src/app/eval/` | Evaluation page: pick a model, what to run (our dataset, your uploaded prompts, or both), tests, judges and weights; check, start, follow progress |
+| `dashboard/src/app/methodology/` | Methodology page: how the tests work and are scored, weights, reading results, limits, and a searchable glossary |
+| `dashboard/src/lib/glossary.ts` | Every hover explanation and glossary entry, in one place so they never disagree. Edit wording here |
 | `dashboard/src/components/PromptUpload.tsx` | Uploading your own prompts: format guide, checks, saved sets |
 | `dashboard/src/app/api/backend/` | Passes the Evaluation page's requests on to the backend's API |
 | `dashboard/src/server/` | Reads the results database (read-only) |
 | `dashboard/DEPLOY.md` | How the hosted, read-only demo is deployed |
 | `dashboard/db/`, `scripts/seed.ts`, `data/Example_Output.xlsx` | Legacy: the first prototype's own schema and example data, from before the dashboard read the backend's database. Not used by the pages |
-| `docs/`, `scoring/` | The evaluation team's methodology guide and their stand-alone scoring script. The site does not run `scoring/`; the scoring it shows is the backend's |
+| `docs/` | The evaluation team's Methodology and User Guide (the Documentation button opens it). The scoring the site shows is the backend's |
 | `tool-backend/` | Legacy: early backend pieces for the web features, written for an older database version. The working versions now live in the backend repository |
 
 ## The tests it shows
@@ -78,7 +80,7 @@ Settings in `.env.local`:
 | `SQLITE_PATH` | The backend's results database. For made-up example data, run `uv run raieval demo-db` in the backend |
 | `RAIEVAL_API_URL` | The backend's API, for the Evaluation page. Start it with `uv run raieval serve` in the backend |
 | `READ_ONLY`, `SITE_USERNAME`, `SITE_PASSWORD` | For the hosted demo only; see `dashboard/DEPLOY.md`. Leave unset locally |
-| `NEXT_PUBLIC_GITHUB_URL`, `NEXT_PUBLIC_DOCS_URL` | Where the GitHub and Documentation buttons point |
+| `NEXT_PUBLIC_GITHUB_URL`, `NEXT_PUBLIC_DOCS_URL` | Where the GitHub and Documentation buttons point. Default: the project's GitHub organization and the guide in `docs/` |
 
 The score report only needs `SQLITE_PATH`. The Evaluation page needs the backend's API running, and
 real runs need the model providers' API keys in the backend's `.env`; the website never sees them.

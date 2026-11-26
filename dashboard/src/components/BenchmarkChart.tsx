@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Customized, LabelList, Tooltip, XAxis, YAxis } from "recharts";
 import { TRAFFIC, trafficBand, type TrafficName } from "@/lib/colors";
 import { AVERAGE_SERIES, type ChartRow } from "@/lib/score";
@@ -9,7 +9,7 @@ type BenchmarkChartProps = {
   title: string;
   model: string;
   data: ChartRow[];
-  caption?: string;
+  caption?: ReactNode;
   emptyLabel?: string;
   onOpen: (axis: string) => void;
 };
